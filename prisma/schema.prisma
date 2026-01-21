@@ -14,6 +14,26 @@ enum ArticleStatus {
   ARCHIVED
 }
 
+enum UserRole {
+  ADMIN
+  EDITOR
+  AUTHOR
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(AUTHOR)
+  isActive  Boolean  @default(true)
+
+  articles  Article[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Category {
   id        String   @id @default(cuid())
   name      String
@@ -88,6 +108,9 @@ model Article {
 
   category   Category? @relation(fields: [categoryId], references: [id])
   categoryId String?
+
+  author   User?   @relation(fields: [authorId], references: [id])
+  authorId String?
 
   tags ArticleTag[]
 }
