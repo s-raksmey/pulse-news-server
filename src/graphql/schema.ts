@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { GraphQLJSONObject } from "graphql-scalars";
 import { z } from "zod";
 import { registerUser, loginUser, getCurrentUser } from "../resolvers/auth";
+import { GraphQLContext, requireAuth, requireEditor } from "../middleware/auth";
 
 /**
  * IMPORTANT:
@@ -364,9 +365,7 @@ export const schema = createSchema({
     },
 
     Query: {
-      me: async (_: unknown, __: unknown, context: any) => {
-        // This will be implemented when we add JWT middleware
-        // For now, return an error response
+      me: async (_: unknown, __: unknown, context: GraphQLContext) => {
         if (!context.user) {
           return {
             success: false,
@@ -571,7 +570,10 @@ export const schema = createSchema({
         return loginUser(input);
       },
 
-      upsertArticle: async (_: unknown, { id, input }: any) => {
+      upsertArticle: async (_: unknown, { id, input }: any, context: GraphQLContext) => {
+        // Require authentication for article creation/editing
+        requireAuth(context);
+        
         const data = ArticleInput.parse(input);
         const includeBreaking = await hasBreakingColumn();
 
@@ -600,7 +602,9 @@ export const schema = createSchema({
           isEditorsPick: data.isEditorsPick ?? false,
           pinnedAt: data.pinnedAt ? new Date(data.pinnedAt) : null,
 
-          authorName: data.authorName ?? null,
+          authorName: data.authorName ?? context.user.name,
+          // Set authorId if the relationship exists in the schema
+          ...(context.user.id && { authorId: context.user.id }),
           coverImageUrl: data.coverImageUrl ?? null,
 
           seoTitle: data.seoTitle ?? null,
@@ -674,7 +678,15 @@ export const schema = createSchema({
         return article;
       },
 
-      setArticleStatus: async (_: unknown, { id, status }: any) => {
+      setArticleStatus: async (_: unknown, { id, status }: any, context: GraphQLContext) => {
+        // Require authentication
+        requireAuth(context);
+        
+        // Require editor permissions for publishing articles
+        if (status === "PUBLISHED") {
+          requireEditor(context);
+        }
+        
         return db.article.update({
           where: { id },
           data: {
