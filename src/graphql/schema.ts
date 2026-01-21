@@ -2,6 +2,7 @@ import { createSchema } from "graphql-yoga";
 import { prisma } from "../lib/prisma";
 import { GraphQLJSONObject } from "graphql-scalars";
 import { z } from "zod";
+import { registerUser, loginUser, getCurrentUser } from "../resolvers/auth";
 
 /**
  * IMPORTANT:
@@ -192,6 +193,40 @@ export const schema = createSchema({
       tags: [Tag!]
     }
 
+    enum UserRole {
+      ADMIN
+      EDITOR
+      AUTHOR
+    }
+
+    type User {
+      id: ID!
+      email: String!
+      name: String!
+      role: UserRole!
+      isActive: Boolean!
+      createdAt: String!
+    }
+
+    type AuthResponse {
+      success: Boolean!
+      message: String!
+      token: String
+      user: User
+    }
+
+    input RegisterInput {
+      email: String!
+      password: String!
+      name: String!
+      role: UserRole
+    }
+
+    input LoginInput {
+      email: String!
+      password: String!
+    }
+
     input UpsertArticleInput {
       title: String!
       slug: String!
@@ -216,6 +251,10 @@ export const schema = createSchema({
     }
 
     type Query {
+      # Authentication queries
+      me: AuthResponse!
+      
+      # Content queries
       categories: [Category!]!
 
       articles(
@@ -240,6 +279,11 @@ export const schema = createSchema({
     }
 
     type Mutation {
+      # Authentication mutations
+      register(input: RegisterInput!): AuthResponse!
+      login(input: LoginInput!): AuthResponse!
+      
+      # Article mutations
       upsertArticle(id: ID, input: UpsertArticleInput!): Article!
       setArticleStatus(id: ID!, status: ArticleStatus!): Article!
       incrementArticleView(slug: String!): Boolean!
@@ -282,6 +326,10 @@ export const schema = createSchema({
       createdAt: (p: any) => toIso(p.createdAt),
     },
 
+    User: {
+      createdAt: (p: any) => toIso(p.createdAt),
+    },
+
     Article: {
       createdAt: (p: any) => toIso(p.createdAt),
       updatedAt: (p: any) => toIso(p.updatedAt),
@@ -316,6 +364,19 @@ export const schema = createSchema({
     },
 
     Query: {
+      me: async (_: unknown, __: unknown, context: any) => {
+        // This will be implemented when we add JWT middleware
+        // For now, return an error response
+        if (!context.user) {
+          return {
+            success: false,
+            message: 'Authentication required',
+          };
+        }
+        
+        return getCurrentUser(context.user.id);
+      },
+
       categories: async () =>
         db.category.findMany({ orderBy: { name: "asc" } }),
 
@@ -502,6 +563,14 @@ export const schema = createSchema({
     },
 
     Mutation: {
+      register: async (_: unknown, { input }: any) => {
+        return registerUser(input);
+      },
+
+      login: async (_: unknown, { input }: any) => {
+        return loginUser(input);
+      },
+
       upsertArticle: async (_: unknown, { id, input }: any) => {
         const data = ArticleInput.parse(input);
         const includeBreaking = await hasBreakingColumn();
