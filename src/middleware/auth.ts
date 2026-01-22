@@ -27,7 +27,7 @@ export async function createAuthContext(request: Request): Promise<GraphQLContex
   try {
     // Extract token from Authorization header
     const authHeader = request.headers.get('authorization');
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractTokenFromHeader(authHeader ?? undefined);
 
     if (!token) {
       // No token provided - return context without user (public access)
