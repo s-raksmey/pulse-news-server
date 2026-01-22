@@ -100,6 +100,16 @@ export const ChangePasswordInput = z.object({
   newPassword: z.string().min(8, 'New password must be at least 8 characters'),
 });
 
+export const CreateUserInput = z.object({
+  name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  role: z.enum(['ADMIN', 'EDITOR', 'AUTHOR'], {
+    errorMap: () => ({ message: 'Role must be ADMIN, EDITOR, or AUTHOR' })
+  }).default('AUTHOR'),
+  isActive: z.boolean().default(true),
+});
+
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
@@ -477,6 +487,80 @@ export async function updateUserStatus(
     return {
       success: false,
       message: 'Failed to update user status',
+    };
+  }
+}
+
+/**
+ * Create a new user - admin only
+ */
+export async function createUser(
+  input: z.infer<typeof CreateUserInput>,
+  requestingUserId: string
+): Promise<UserManagementResult> {
+  try {
+    // Validate input
+    const validatedInput = CreateUserInput.parse(input);
+
+    // Check if user with this email already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: validatedInput.email },
+    });
+
+    if (existingUser) {
+      return {
+        success: false,
+        message: 'A user with this email already exists',
+      };
+    }
+
+    // Hash the password
+    const hashedPassword = await hashPassword(validatedInput.password);
+
+    // Create the user
+    const newUser = await prisma.user.create({
+      data: {
+        name: validatedInput.name,
+        email: validatedInput.email,
+        password: hashedPassword,
+        role: validatedInput.role,
+        isActive: validatedInput.isActive,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    // Log activity
+    await logActivity(newUser.id, 'ACCOUNT_CREATED', requestingUserId, {
+      role: validatedInput.role,
+      isActive: validatedInput.isActive,
+    });
+
+    return {
+      success: true,
+      message: 'User created successfully',
+      user: newUser,
+    };
+  } catch (error) {
+    console.error('Error creating user:', error);
+    
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        message: `Validation error: ${error.errors.map(e => e.message).join(', ')}`,
+      };
+    }
+
+    return {
+      success: false,
+      message: 'Failed to create user',
     };
   }
 }
@@ -950,6 +1034,7 @@ export default {
   // Core user operations
   listUsers,
   getUserById,
+  createUser,
   updateUserProfile,
   updateUserRole,
   updateUserStatus,
@@ -973,4 +1058,3 @@ export default {
   hashPassword,
   verifyPassword,
 };
-
