@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma";
 import { GraphQLJSONObject } from "graphql-scalars";
 import { z } from "zod";
 import { registerUser, loginUser, getCurrentUser } from "../resolvers/auth";
-import { GraphQLContext, requireAuth, requireEditor } from "../middleware/auth";
+import { GraphQLContext, requireAdmin, requireAuth, requireEditor } from "../middleware/auth";
 import { searchArticles, getSearchSuggestions, SearchInput } from "../services/searchService";
 import { getRelatedArticles, RelatedArticlesInput } from "../services/relatedArticlesService";
 
