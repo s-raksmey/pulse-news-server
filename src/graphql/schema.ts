@@ -4,6 +4,7 @@ import { GraphQLJSONObject } from "graphql-scalars";
 import { z } from "zod";
 import { registerUser, loginUser, getCurrentUser } from "../resolvers/auth";
 import { GraphQLContext, requireAuth, requireEditor } from "../middleware/auth";
+import { searchArticles, getSearchSuggestions, SearchInput } from "../services/searchService";
 
 /**
  * IMPORTANT:
@@ -277,6 +278,10 @@ export const schema = createSchema({
       relatedArticles(slug: String!, limit: Int = 6): [Article!]!
       topicBySlug(categorySlug: String!, topicSlug: String!): Topic
       topicsByCategory(categorySlug: String!): [Topic!]!
+      
+      # Search queries
+      searchArticles(input: SearchInput!): SearchResult!
+      searchSuggestions(query: String!, limit: Int = 5): [String!]!
     }
 
     type Mutation {
@@ -312,6 +317,59 @@ export const schema = createSchema({
       description: String
       coverImageUrl: String
       coverVideoUrl: String
+    }
+
+    input SearchInput {
+      query: String!
+      categorySlug: String
+      tags: [String!]
+      authorName: String
+      status: ArticleStatus
+      dateFrom: String
+      dateTo: String
+      sortBy: SearchSortBy = relevance
+      sortOrder: SortOrder = desc
+      take: Int = 20
+      skip: Int = 0
+    }
+
+    enum SearchSortBy {
+      relevance
+      date
+      views
+      title
+    }
+
+    enum SortOrder {
+      asc
+      desc
+    }
+
+    type SearchResult {
+      articles: [Article!]!
+      totalCount: Int!
+      hasMore: Boolean!
+      searchMeta: SearchMeta!
+    }
+
+    type SearchMeta {
+      query: String!
+      totalResults: Int!
+      searchTime: Int!
+      filters: SearchFilters!
+    }
+
+    type SearchFilters {
+      category: String
+      tags: [String!]
+      author: String
+      status: String
+      dateRange: DateRange
+    }
+
+    type DateRange {
+      from: String
+      to: String
     }
   `,
 
@@ -558,6 +616,33 @@ export const schema = createSchema({
           where: { categoryId: category.id },
           orderBy: { title: "asc" },
         });
+      },
+
+      // Search resolvers
+      searchArticles: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        try {
+          const result = await searchArticles(input, context.user?.id);
+          return result;
+        } catch (error) {
+          console.error('Search articles error:', error);
+          throw new Error('Search failed. Please try again.');
+        }
+      },
+
+      searchSuggestions: async (
+        _: unknown,
+        { query, limit }: { query: string; limit?: number }
+      ) => {
+        try {
+          return await getSearchSuggestions(query, limit);
+        } catch (error) {
+          console.error('Search suggestions error:', error);
+          return [];
+        }
       },
     },
 
