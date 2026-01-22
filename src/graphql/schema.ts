@@ -48,13 +48,20 @@ const ArticleInput = z.object({
 });
 
 const TopicInput = z.object({
-  categorySlug: z.string().min(1),
+  categorySlug: z.string().min(1).optional(),
+  categoryId: z.string().optional(),
   slug: z.string().min(1),
   title: z.string().min(2),
   description: z.string().optional().nullable(),
   coverImageUrl: z.string().url().optional().nullable(),
   coverVideoUrl: z.string().optional().nullable(),
-});
+}).refine(
+  (data) => data.categorySlug || data.categoryId,
+  {
+    message: "Either categorySlug or categoryId must be provided",
+    path: ["categorySlug"],
+  }
+);
 
 function toIso(d?: Date | null): string | null {
   return d ? d.toISOString() : null;
@@ -338,7 +345,8 @@ export const schema = createSchema({
     }
 
     input UpsertTopicInput {
-      categorySlug: String!
+      categorySlug: String
+      categoryId: String
       slug: String!
       title: String!
       description: String
@@ -899,111 +907,171 @@ export const schema = createSchema({
       },
 
       upsertArticle: async (_: unknown, { id, input }: any, context: GraphQLContext) => {
-        // Require authentication for article creation/editing
-        requireAuth(context);
-        
-        const data = ArticleInput.parse(input);
-        const includeBreaking = await hasBreakingColumn();
+        try {
+          // Require authentication for article creation/editing
+          requireAuth(context);
+          
+          // Validate input data
+          let data;
+          try {
+            data = ArticleInput.parse(input);
+          } catch (validationError: any) {
+            console.error('Article validation error:', validationError);
+            throw new Error(`Invalid article data: ${validationError.message}`);
+          }
 
-        const category = data.categorySlug
-          ? await db.category.findFirst({
+          const includeBreaking = await hasBreakingColumn();
+
+          // Validate category if provided
+          let category = null;
+          if (data.categorySlug) {
+            category = await db.category.findFirst({
               where: { slug: data.categorySlug },
-              select: { id: true },
-            })
-          : null;
-
-        const status = data.status ?? "DRAFT";
-
-        const payload: any = {
-          title: data.title,
-          slug: data.slug,
-          excerpt: data.excerpt ?? null,
-          status,
-          topic: data.topic ?? null,
-          contentJson: data.contentJson ?? {
-            time: Date.now(),
-            blocks: [],
-            version: "2.x",
-          },
-
-          isFeatured: data.isFeatured ?? false,
-          isEditorsPick: data.isEditorsPick ?? false,
-          pinnedAt: data.pinnedAt ? new Date(data.pinnedAt) : null,
-
-          authorName: data.authorName ?? context.user.name,
-          // Set authorId if the relationship exists in the schema
-          ...(context.user.id && { authorId: context.user.id }),
-          coverImageUrl: data.coverImageUrl ?? null,
-
-          seoTitle: data.seoTitle ?? null,
-          seoDescription: data.seoDescription ?? null,
-          ogImageUrl: data.ogImageUrl ?? null,
-
-          categoryId: category?.id ?? null,
-        };
-
-        if (includeBreaking) {
-          payload.isBreaking = data.isBreaking ?? false;
-        }
-
-        const select = await getArticleSelect();
-        let article;
-
-        if (id) {
-          // update by ID (edit page)
-          article = await db.article.update({
-            where: { id },
-            data: payload,
-            select,
-          });
-        } else {
-          // create OR update by slug (new page / retry-safe)
-          const existing = await db.article.findUnique({
-            where: { slug: data.slug },
-            select: { id: true },
-          });
-
-          if (existing) {
-            article = await db.article.update({
-              where: { id: existing.id },
-              data: payload,
-              select,
+              select: { id: true, name: true },
             });
+            
+            if (!category) {
+              throw new Error(`Category with slug "${data.categorySlug}" not found. Please select a valid category.`);
+            }
+          }
+
+          const status = data.status ?? "DRAFT";
+
+          const payload: any = {
+            title: data.title,
+            slug: data.slug,
+            excerpt: data.excerpt ?? null,
+            status,
+            topic: data.topic ?? null,
+            contentJson: data.contentJson ?? {
+              time: Date.now(),
+              blocks: [],
+              version: "2.x",
+            },
+
+            isFeatured: data.isFeatured ?? false,
+            isEditorsPick: data.isEditorsPick ?? false,
+            pinnedAt: data.pinnedAt ? new Date(data.pinnedAt) : null,
+
+            authorName: data.authorName ?? context.user?.name ?? "Unknown Author",
+            // Set authorId if the relationship exists in the schema
+            ...(context.user?.id && { authorId: context.user.id }),
+            coverImageUrl: data.coverImageUrl ?? null,
+
+            seoTitle: data.seoTitle ?? null,
+            seoDescription: data.seoDescription ?? null,
+            ogImageUrl: data.ogImageUrl ?? null,
+
+            categoryId: category?.id ?? null,
+          };
+
+          if (includeBreaking) {
+            payload.isBreaking = data.isBreaking ?? false;
+          }
+
+          const select = await getArticleSelect();
+          let article;
+
+          if (id) {
+            // update by ID (edit page)
+            try {
+              // Check if article exists
+              const existingArticle = await db.article.findUnique({
+                where: { id },
+                select: { id: true, title: true },
+              });
+              
+              if (!existingArticle) {
+                throw new Error(`Article with ID "${id}" not found.`);
+              }
+
+              article = await db.article.update({
+                where: { id },
+                data: payload,
+                select,
+              });
+            } catch (updateError: any) {
+              console.error('Article update error:', updateError);
+              if (updateError.code === 'P2025') {
+                throw new Error(`Article with ID "${id}" not found.`);
+              }
+              throw new Error(`Failed to update article: ${updateError.message}`);
+            }
           } else {
-            article = await db.article.create({
-              data: {
-                ...payload,
-                publishedAt: status === "PUBLISHED" ? new Date() : null,
-              },
-              select,
-            });
+            // create OR update by slug (new page / retry-safe)
+            try {
+              const existing = await db.article.findUnique({
+                where: { slug: data.slug },
+                select: { id: true },
+              });
+
+              if (existing) {
+                article = await db.article.update({
+                  where: { id: existing.id },
+                  data: payload,
+                  select,
+                });
+              } else {
+                article = await db.article.create({
+                  data: {
+                    ...payload,
+                    publishedAt: status === "PUBLISHED" ? new Date() : null,
+                  },
+                  select,
+                });
+              }
+            } catch (createError: any) {
+              console.error('Article create error:', createError);
+              if (createError.code === 'P2002') {
+                throw new Error(`An article with slug "${data.slug}" already exists. Please use a different slug.`);
+              }
+              throw new Error(`Failed to create article: ${createError.message}`);
+            }
           }
-        }
 
-        // tags
-        if (data.tagSlugs) {
-          await db.articleTag.deleteMany({
-            where: { articleId: article.id },
-          });
+          // Handle tags
+          if (data.tagSlugs && data.tagSlugs.length > 0) {
+            try {
+              await db.articleTag.deleteMany({
+                where: { articleId: article.id },
+              });
 
-          const unique = Array.from(
-            new Set(data.tagSlugs.map(normalizeTagSlug).filter(Boolean))
-          );
+              const unique = Array.from(
+                new Set(data.tagSlugs.map(normalizeTagSlug).filter(Boolean))
+              );
 
-          for (const slug of unique) {
-            const tag = await db.tag.upsert({
-              where: { slug },
-              update: {},
-              create: { slug, name: slug },
-            });
+              for (const slug of unique) {
+                const tag = await db.tag.upsert({
+                  where: { slug },
+                  update: {},
+                  create: { slug, name: slug },
+                });
 
-            await db.articleTag.create({
-              data: { articleId: article.id, tagId: tag.id },
-            });
+                await db.articleTag.create({
+                  data: { articleId: article.id, tagId: tag.id },
+                });
+              }
+            } catch (tagError: any) {
+              console.error('Tag processing error:', tagError);
+              // Don't fail the entire operation for tag errors, just log them
+              console.warn(`Failed to process tags for article ${article.id}: ${tagError.message}`);
+            }
           }
-        }
 
-        return article;
+          console.log(`✅ Successfully ${id ? 'updated' : 'created'} article: ${article.title} (ID: ${article.id})`);
+          return article;
+        } catch (error: any) {
+          console.error('upsertArticle error:', error);
+          
+          // Re-throw with more context if it's not already a user-friendly error
+          if (error.message.includes('Invalid article data') || 
+              error.message.includes('not found') || 
+              error.message.includes('already exists')) {
+            throw error;
+          }
+          
+          throw new Error(`Failed to save article. Please check your data and try again. Details: ${error.message}`);
+        }
       },
 
       setArticleStatus: async (_: unknown, { id, status }: any, context: GraphQLContext) => {
@@ -1057,41 +1125,73 @@ export const schema = createSchema({
       },
 
       upsertTopic: async (_: unknown, { id, input }: any) => {
-        const data = TopicInput.parse(input);
+        try {
+          const data = TopicInput.parse(input);
 
-        const category = await db.category.findUnique({
-          where: { slug: data.categorySlug },
-          select: { id: true },
-        });
+          // Find category by either categoryId or categorySlug
+          let category = null;
+          if (data.categoryId) {
+            category = await db.category.findUnique({
+              where: { id: data.categoryId },
+              select: { id: true, name: true },
+            });
+          } else if (data.categorySlug) {
+            category = await db.category.findUnique({
+              where: { slug: data.categorySlug },
+              select: { id: true, name: true },
+            });
+          }
 
-        if (!category) throw new Error("Category not found");
+          if (!category) {
+            const identifier = data.categoryId ? `ID "${data.categoryId}"` : `slug "${data.categorySlug}"`;
+            throw new Error(`Category with ${identifier} not found. Please select a valid category.`);
+          }
 
-        const payload = {
-          slug: data.slug,
-          title: data.title,
-          description: data.description ?? null,
-          coverImageUrl: data.coverImageUrl ?? null,
-          coverVideoUrl: data.coverVideoUrl ?? null,
-          categoryId: category.id,
-        };
+          const payload = {
+            slug: data.slug,
+            title: data.title,
+            description: data.description ?? null,
+            coverImageUrl: data.coverImageUrl ?? null,
+            coverVideoUrl: data.coverVideoUrl ?? null,
+            categoryId: category.id,
+          };
 
-        if (id) {
-          return db.topic.update({
-            where: { id },
-            data: payload,
-          });
-        }
+          if (id) {
+            // Check if topic exists
+            const existingTopic = await db.topic.findUnique({
+              where: { id },
+              select: { id: true, title: true },
+            });
+            
+            if (!existingTopic) {
+              throw new Error(`Topic with ID "${id}" not found.`);
+            }
 
-        return db.topic.upsert({
-          where: {
-            categoryId_slug: {
-              categoryId: category.id,
-              slug: data.slug,
+            return db.topic.update({
+              where: { id },
+              data: payload,
+            });
+          }
+
+          return db.topic.upsert({
+            where: {
+              categoryId_slug: {
+                categoryId: category.id,
+                slug: data.slug,
+              },
             },
-          },
-          update: payload,
-          create: payload,
-        });
+            update: payload,
+            create: payload,
+          });
+        } catch (error: any) {
+          console.error('upsertTopic error:', error);
+          
+          if (error.message.includes('not found') || error.message.includes('Invalid')) {
+            throw error;
+          }
+          
+          throw new Error(`Failed to save topic: ${error.message}`);
+        }
       },
 
       deleteTopic: async (_: unknown, { id }: { id: string }) => {
