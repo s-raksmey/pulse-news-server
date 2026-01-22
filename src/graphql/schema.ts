@@ -1048,7 +1048,7 @@ export const schema = createSchema({
 
       bulkUpdateUserRoles: async (
         _: unknown,
-        { userIds, role }: { userIds: string[]; role: string },
+        { userIds, role }: { userIds: string[]; role: 'ADMIN' | 'EDITOR' | 'AUTHOR' },
         context: GraphQLContext
       ) => {
         requireAuth(context);

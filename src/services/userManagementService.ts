@@ -777,7 +777,7 @@ export async function getUserActivity(userId?: string, limit: number = 50): Prom
 /**
  * Bulk update user roles
  */
-export async function bulkUpdateUserRoles(userIds: string[], role: string, requestingUserId: string): Promise<UserManagementResult> {
+export async function bulkUpdateUserRoles(userIds: string[], role: 'ADMIN' | 'EDITOR' | 'AUTHOR', requestingUserId: string): Promise<UserManagementResult> {
   try {
     // Validate role
     if (!['ADMIN', 'EDITOR', 'AUTHOR'].includes(role)) {
@@ -798,10 +798,12 @@ export async function bulkUpdateUserRoles(userIds: string[], role: string, reque
     // Update users
     const result = await prisma.user.updateMany({
       where: { 
-        id: { in: userIds },
-        id: { not: requestingUserId } // Extra safety
+        id: { 
+          in: userIds,
+          not: requestingUserId // Extra safety - combine filters
+        }
       },
-      data: { role },
+      data: { role }, // Now properly typed
     });
 
     // Log activities for each user
@@ -849,8 +851,10 @@ export async function bulkUpdateUserStatus(userIds: string[], isActive: boolean,
     // Update users
     const result = await prisma.user.updateMany({
       where: { 
-        id: { in: userIds },
-        id: { not: requestingUserId } // Extra safety
+        id: { 
+          in: userIds,
+          not: requestingUserId // Extra safety - combine filters
+        }
       },
       data: { isActive },
     });
