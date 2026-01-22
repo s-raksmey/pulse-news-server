@@ -284,6 +284,12 @@ export const schema = createSchema({
       # Search queries
       searchArticles(input: SearchInput!): SearchResult!
       searchSuggestions(query: String!, limit: Int = 5): [String!]!
+      
+      # User management queries
+      listUsers(input: ListUsersInput!): UserListResult!
+      getUserById(id: ID!): User!
+      getUserStats: UserStats!
+      getUserActivity(userId: ID, limit: Int = 50): [ActivityLog!]!
     }
 
     type Mutation {
@@ -298,6 +304,17 @@ export const schema = createSchema({
       deleteArticle(id: ID!): Boolean!
       upsertTopic(id: ID, input: UpsertTopicInput!): Topic!
       deleteTopic(id: ID!): Boolean!
+      
+      # User management mutations
+      updateUserProfile(input: UpdateUserProfileInput!): UserManagementResult!
+      updateUserRole(input: UpdateUserRoleInput!): UserManagementResult!
+      updateUserStatus(input: UpdateUserStatusInput!): UserManagementResult!
+      deleteUser(id: ID!): UserManagementResult!
+      changePassword(input: ChangePasswordInput!): PasswordResetResult!
+      requestPasswordReset(input: RequestPasswordResetInput!): PasswordResetResult!
+      resetPassword(input: ResetPasswordInput!): PasswordResetResult!
+      bulkUpdateUserRoles(userIds: [ID!]!, role: UserRole!): UserManagementResult!
+      bulkUpdateUserStatus(userIds: [ID!]!, isActive: Boolean!): UserManagementResult!
     }
 
     type Topic {
@@ -397,6 +414,113 @@ export const schema = createSchema({
       cacheHit: Boolean!
       processingTime: Int!
       scores: JSON
+    }
+
+    # ============================================================================
+    # USER MANAGEMENT TYPES
+    # ============================================================================
+
+    enum UserStatus {
+      ACTIVE
+      INACTIVE
+    }
+
+    enum UserSortBy {
+      name
+      email
+      role
+      createdAt
+      updatedAt
+    }
+
+    type UserListResult {
+      users: [User!]!
+      totalCount: Int!
+      hasMore: Boolean!
+      filters: UserListFilters!
+    }
+
+    type UserListFilters {
+      search: String
+      role: UserRole
+      status: UserStatus
+    }
+
+    type UserManagementResult {
+      success: Boolean!
+      message: String!
+      user: User
+    }
+
+    type PasswordResetResult {
+      success: Boolean!
+      message: String!
+    }
+
+    type UserStats {
+      totalUsers: Int!
+      activeUsers: Int!
+      inactiveUsers: Int!
+      usersByRole: UserRoleStats!
+      recentRegistrations: Int!
+    }
+
+    type UserRoleStats {
+      admin: Int!
+      editor: Int!
+      author: Int!
+    }
+
+    type ActivityLog {
+      id: ID!
+      userId: String!
+      activityType: String!
+      details: JSON
+      performedBy: String!
+      timestamp: String!
+      user: User
+    }
+
+    input ListUsersInput {
+      take: Int = 20
+      skip: Int = 0
+      search: String
+      role: UserRole
+      status: UserStatus
+      sortBy: UserSortBy = createdAt
+      sortOrder: SortOrder = desc
+    }
+
+    input UpdateUserProfileInput {
+      userId: ID!
+      name: String!
+      email: String!
+    }
+
+    input UpdateUserRoleInput {
+      userId: ID!
+      role: UserRole!
+    }
+
+    input UpdateUserStatusInput {
+      userId: ID!
+      isActive: Boolean!
+      reason: String
+    }
+
+    input RequestPasswordResetInput {
+      email: String!
+    }
+
+    input ResetPasswordInput {
+      token: String!
+      newPassword: String!
+    }
+
+    input ChangePasswordInput {
+      userId: ID!
+      currentPassword: String!
+      newPassword: String!
     }
   `,
 
@@ -685,6 +809,57 @@ export const schema = createSchema({
           return [];
         }
       },
+
+      // ============================================================================
+      // USER MANAGEMENT QUERIES
+      // ============================================================================
+
+      listUsers: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        const { listUsers } = await import('../services/userManagementService.js');
+        
+        return listUsers(input, context.user!.id);
+      },
+
+      getUserById: async (
+        _: unknown,
+        { id }: { id: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        const { getUserById } = await import('../services/userManagementService.js');
+        
+        return getUserById(id, context.user!.id, context.user!.role === 'ADMIN');
+      },
+
+      getUserStats: async (
+        _: unknown,
+        __: unknown,
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        const { getUserStats } = await import('../services/userManagementService.js');
+        
+        return getUserStats();
+      },
+
+      getUserActivity: async (
+        _: unknown,
+        { userId, limit }: { userId?: string; limit?: number },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        const { getUserActivity } = await import('../services/userManagementService.js');
+        
+        return getUserActivity(userId, limit);
+      },
     },
 
     Mutation: {
@@ -898,6 +1073,112 @@ export const schema = createSchema({
 
         await db.topic.delete({ where: { id } });
         return true;
+      },
+
+      // ============================================================================
+      // USER MANAGEMENT MUTATIONS
+      // ============================================================================
+
+      updateUserProfile: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        const { updateUserProfile } = await import('../services/userManagementService.js');
+        
+        return updateUserProfile(
+          input,
+          context.user!.id,
+          context.user!.role === 'ADMIN'
+        );
+      },
+
+      updateUserRole: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        const { updateUserRole } = await import('../services/userManagementService.js');
+        
+        return updateUserRole(input, context.user!.id);
+      },
+
+      updateUserStatus: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        const { updateUserStatus } = await import('../services/userManagementService.js');
+        
+        return updateUserStatus(input, context.user!.id);
+      },
+
+      deleteUser: async (
+        _: unknown,
+        { id }: { id: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        const { deleteUser } = await import('../services/userManagementService.js');
+        
+        return deleteUser(id, context.user!.id);
+      },
+
+      changePassword: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        const { changePassword } = await import('../services/userManagementService.js');
+        
+        return changePassword(input);
+      },
+
+      requestPasswordReset: async (
+        _: unknown,
+        { input }: { input: any }
+      ) => {
+        const { requestPasswordReset } = await import('../services/userManagementService.js');
+        return requestPasswordReset(input);
+      },
+
+      resetPassword: async (
+        _: unknown,
+        { input }: { input: any }
+      ) => {
+        const { resetPassword } = await import('../services/userManagementService.js');
+        return resetPassword(input);
+      },
+
+      bulkUpdateUserRoles: async (
+        _: unknown,
+        { userIds, role }: { userIds: string[]; role: 'ADMIN' | 'EDITOR' | 'AUTHOR' },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        const { bulkUpdateUserRoles } = await import('../services/userManagementService.js');
+        
+        return bulkUpdateUserRoles(userIds, role, context.user!.id);
+      },
+
+      bulkUpdateUserStatus: async (
+        _: unknown,
+        { userIds, isActive }: { userIds: string[]; isActive: boolean },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        const { bulkUpdateUserStatus } = await import('../services/userManagementService.js');
+        
+        return bulkUpdateUserStatus(userIds, isActive, context.user!.id);
       },
     },
   },
