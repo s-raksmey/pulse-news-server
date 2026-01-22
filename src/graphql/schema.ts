@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { GraphQLJSONObject } from "graphql-scalars";
 import { z } from "zod";
 import { registerUser, loginUser, getCurrentUser } from "../resolvers/auth";
+import { GraphQLContext, requireAuth, requireEditor, requireAdmin } from "../middleware/auth";
 import { GraphQLContext, requireAdmin, requireAuth, requireEditor } from "../middleware/auth";
 import { searchArticles, getSearchSuggestions, SearchInput } from "../services/searchService";
 import { getRelatedArticles, RelatedArticlesInput } from "../services/relatedArticlesService";
@@ -305,6 +306,11 @@ export const schema = createSchema({
       upsertTopic(id: ID, input: UpsertTopicInput!): Topic!
       deleteTopic(id: ID!): Boolean!
       
+      # Category mutations
+      createCategory(input: CreateCategoryInput!): Category!
+      updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
+      deleteCategory(id: ID!): Boolean!
+      
       # User management mutations
       updateUserProfile(input: UpdateUserProfileInput!): UserManagementResult!
       updateUserRole(input: UpdateUserRoleInput!): UserManagementResult!
@@ -336,6 +342,18 @@ export const schema = createSchema({
       description: String
       coverImageUrl: String
       coverVideoUrl: String
+    }
+
+    input CreateCategoryInput {
+      name: String!
+      slug: String!
+      description: String
+    }
+
+    input UpdateCategoryInput {
+      name: String
+      slug: String
+      description: String
     }
 
     input SearchInput {
@@ -1072,6 +1090,125 @@ export const schema = createSchema({
         if (!topic) return false;
 
         await db.topic.delete({ where: { id } });
+        return true;
+      },
+
+      // ============================================================================
+      // CATEGORY MUTATIONS
+      // ============================================================================
+
+      createCategory: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireEditor(context);
+
+        const data = z.object({
+          name: z.string().min(1, "Name is required"),
+          slug: z.string().min(1, "Slug is required"),
+          description: z.string().optional().nullable(),
+        }).parse(input);
+
+        // Check if slug already exists
+        const existingCategory = await db.category.findUnique({
+          where: { slug: data.slug }
+        });
+
+        if (existingCategory) {
+          throw new Error("A category with this slug already exists");
+        }
+
+        return await db.category.create({
+          data: {
+            name: data.name,
+            slug: data.slug,
+            description: data.description,
+          }
+        });
+      },
+
+      updateCategory: async (
+        _: unknown,
+        { id, input }: { id: string; input: any },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireEditor(context);
+
+        const data = z.object({
+          name: z.string().min(1).optional(),
+          slug: z.string().min(1).optional(),
+          description: z.string().optional().nullable(),
+        }).parse(input);
+
+        // Check if category exists
+        const existingCategory = await db.category.findUnique({
+          where: { id }
+        });
+
+        if (!existingCategory) {
+          throw new Error("Category not found");
+        }
+
+        // If slug is being updated, check for conflicts
+        if (data.slug && data.slug !== existingCategory.slug) {
+          const slugConflict = await db.category.findUnique({
+            where: { slug: data.slug }
+          });
+
+          if (slugConflict) {
+            throw new Error("A category with this slug already exists");
+          }
+        }
+
+        return await db.category.update({
+          where: { id },
+          data: {
+            ...(data.name && { name: data.name }),
+            ...(data.slug && { slug: data.slug }),
+            ...(data.description !== undefined && { description: data.description }),
+          }
+        });
+      },
+
+      deleteCategory: async (
+        _: unknown,
+        { id }: { id: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireEditor(context);
+
+        // Check if category exists
+        const existingCategory = await db.category.findUnique({
+          where: { id }
+        });
+
+        if (!existingCategory) {
+          throw new Error("Category not found");
+        }
+
+        // Check if category has articles
+        const articlesCount = await db.article.count({
+          where: { categoryId: id }
+        });
+
+        if (articlesCount > 0) {
+          throw new Error(`Cannot delete category. It has ${articlesCount} articles associated with it.`);
+        }
+
+        // Check if category has topics
+        const topicsCount = await db.topic.count({
+          where: { categoryId: id }
+        });
+
+        if (topicsCount > 0) {
+          throw new Error(`Cannot delete category. It has ${topicsCount} topics associated with it.`);
+        }
+
+        await db.category.delete({ where: { id } });
         return true;
       },
 
