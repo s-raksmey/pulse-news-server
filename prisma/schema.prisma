@@ -35,9 +35,10 @@ model User {
 }
 
 model Category {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
 
   articles  Article[]
   topics    Topic[]

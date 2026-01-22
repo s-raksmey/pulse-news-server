@@ -157,6 +157,8 @@ export const schema = createSchema({
       id: ID!
       name: String!
       slug: String!
+      description: String
+      topics: [Topic!]!
       createdAt: String!
       updatedAt: String!
     }
@@ -576,6 +578,18 @@ export const schema = createSchema({
         return db.tag.findMany({
           where: { articles: { some: { articleId: parent.id } } },
           orderBy: { name: "asc" },
+        });
+      },
+    },
+
+    Category: {
+      createdAt: (p: any) => toIso(p.createdAt),
+      updatedAt: (p: any) => toIso(p.updatedAt),
+
+      topics: async (parent: any) => {
+        return db.topic.findMany({
+          where: { categoryId: parent.id },
+          orderBy: { title: "asc" },
         });
       },
     },
