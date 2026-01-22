@@ -5,6 +5,7 @@ import { z } from "zod";
 import { registerUser, loginUser, getCurrentUser } from "../resolvers/auth";
 import { GraphQLContext, requireAuth, requireEditor } from "../middleware/auth";
 import { searchArticles, getSearchSuggestions, SearchInput } from "../services/searchService";
+import { getRelatedArticles, RelatedArticlesInput } from "../services/relatedArticlesService";
 
 /**
  * IMPORTANT:
@@ -276,6 +277,7 @@ export const schema = createSchema({
       latestByCategory(categorySlug: String!, limit: Int = 6): [Article!]!
       trending(limit: Int = 10): [Article!]!
       relatedArticles(slug: String!, limit: Int = 6): [Article!]!
+      enhancedRelatedArticles(input: RelatedArticlesInput!): RelatedArticlesResult!
       topicBySlug(categorySlug: String!, topicSlug: String!): Topic
       topicsByCategory(categorySlug: String!): [Topic!]!
       
@@ -370,6 +372,31 @@ export const schema = createSchema({
     type DateRange {
       from: String
       to: String
+    }
+
+    input RelatedArticlesInput {
+      slug: String!
+      limit: Int = 6
+      algorithm: RelatedArticlesAlgorithm = hybrid
+      includeBreaking: Boolean = false
+      excludeIds: [String!]
+    }
+
+    enum RelatedArticlesAlgorithm {
+      hybrid
+      tags
+      category
+      content
+      popularity
+    }
+
+    type RelatedArticlesResult {
+      articles: [Article!]!
+      algorithm: String!
+      totalFound: Int!
+      cacheHit: Boolean!
+      processingTime: Int!
+      scores: JSON
     }
   `,
 
@@ -557,6 +584,7 @@ export const schema = createSchema({
         _: unknown,
         { slug, limit }: { slug: string; limit?: number }
       ) => {
+        // Keep the original simple implementation for backward compatibility
         const select = await getArticleSelect();
         const article = await db.article.findFirst({
           where: { slug },
@@ -580,6 +608,19 @@ export const schema = createSchema({
           take: limit ?? 6,
           select,
         });
+      },
+
+      enhancedRelatedArticles: async (
+        _: unknown,
+        { input }: { input: any }
+      ) => {
+        try {
+          const result = await getRelatedArticles(input);
+          return result;
+        } catch (error) {
+          console.error('Enhanced related articles error:', error);
+          throw new Error('Failed to get related articles. Please try again.');
+        }
       },
 
       topicBySlug: async (
