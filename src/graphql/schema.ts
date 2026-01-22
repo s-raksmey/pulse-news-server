@@ -547,6 +547,11 @@ export const schema = createSchema({
   resolvers: {
     JSON: GraphQLJSONObject,
 
+    Category: {
+      createdAt: (p: any) => toIso(p.createdAt),
+      updatedAt: (p: any) => toIso(p.updatedAt),
+    },
+
     Tag: {
       createdAt: (p: any) => toIso(p.createdAt),
     },
