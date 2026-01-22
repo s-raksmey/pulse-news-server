@@ -1062,9 +1062,6 @@ export const schema = createSchema({
           return article;
         } catch (error: any) {
           console.error('upsertArticle error:', error);
-          console.error('Error stack:', error.stack);
-          console.error('Error code:', error.code);
-          console.error('Error details:', JSON.stringify(error, null, 2));
           
           // Re-throw with more context if it's not already a user-friendly error
           if (error.message.includes('Invalid article data') || 
@@ -1073,20 +1070,7 @@ export const schema = createSchema({
             throw error;
           }
           
-          // Provide more specific error messages based on error type
-          if (error.code === 'P2002') {
-            throw new Error(`Duplicate entry error: ${error.message}`);
-          }
-          
-          if (error.code === 'P2025') {
-            throw new Error(`Record not found: ${error.message}`);
-          }
-          
-          if (error.code && error.code.startsWith('P')) {
-            throw new Error(`Database error (${error.code}): ${error.message}`);
-          }
-          
-          throw new Error(`Failed to save article. Please check your data and try again. Error: ${error.message} (Code: ${error.code || 'UNKNOWN'})`);
+          throw new Error(`Failed to save article. Please check your data and try again. Details: ${error.message}`);
         }
       },
 
