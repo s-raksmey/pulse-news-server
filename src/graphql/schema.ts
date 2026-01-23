@@ -313,6 +313,7 @@ export const schema = createSchema({
       deleteCategory(id: ID!): Boolean!
       
       # User management mutations
+      createUser(input: CreateUserInput!): UserManagementResult!
       updateUserProfile(input: UpdateUserProfileInput!): UserManagementResult!
       updateUserRole(input: UpdateUserRoleInput!): UserManagementResult!
       updateUserStatus(input: UpdateUserStatusInput!): UserManagementResult!
@@ -503,6 +504,15 @@ export const schema = createSchema({
       performedBy: String!
       timestamp: String!
       user: User
+    }
+
+    input CreateUserInput {
+      name: String!
+      email: String!
+      password: String!
+      role: UserRole = AUTHOR
+      isActive: Boolean = true
+      sendWelcomeEmail: Boolean = true
     }
 
     input ListUsersInput {
@@ -1251,6 +1261,18 @@ export const schema = createSchema({
       // ============================================================================
       // USER MANAGEMENT MUTATIONS
       // ============================================================================
+
+      createUser: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        const { createUser } = await import('../services/userManagementService.js');
+        
+        return createUser(input, context.user!.id);
+      },
 
       updateUserProfile: async (
         _: unknown,

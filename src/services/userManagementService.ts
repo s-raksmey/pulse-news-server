@@ -56,6 +56,15 @@ export interface ActivityLog {
 // VALIDATION SCHEMAS
 // ============================================================================
 
+export const CreateUserInput = z.object({
+  name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  role: z.enum(['ADMIN', 'EDITOR', 'AUTHOR']).default('AUTHOR'),
+  isActive: z.boolean().default(true),
+  sendWelcomeEmail: z.boolean().default(true),
+});
+
 export const ListUsersInput = z.object({
   take: z.number().min(1).max(100).default(20),
   skip: z.number().min(0).default(0),
@@ -156,6 +165,87 @@ async function logActivity(
 // ============================================================================
 // CORE USER MANAGEMENT FUNCTIONS
 // ============================================================================
+
+/**
+ * Create a new user with validation and security
+ */
+export async function createUser(
+  input: z.infer<typeof CreateUserInput>,
+  createdBy: string
+): Promise<UserManagementResult> {
+  try {
+    // Validate input
+    const validatedInput = CreateUserInput.parse(input);
+    const { name, email, password, role, isActive, sendWelcomeEmail } = validatedInput;
+
+    // Check if email already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      return {
+        success: false,
+        message: 'A user with this email already exists',
+      };
+    }
+
+    // Hash password
+    const hashedPassword = await hashPassword(password);
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role,
+        isActive,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    // Log activity
+    await logActivity(user.id, 'USER_CREATED', createdBy, {
+      userRole: role,
+      isActive,
+      sendWelcomeEmail,
+    });
+
+    // TODO: Send welcome email if requested
+    if (sendWelcomeEmail) {
+      console.log(`TODO: Send welcome email to ${email}`);
+    }
+
+    return {
+      success: true,
+      message: 'User created successfully',
+      user,
+    };
+  } catch (error) {
+    console.error('Error creating user:', error);
+    
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        message: `Validation error: ${error.errors.map(e => e.message).join(', ')}`,
+      };
+    }
+
+    return {
+      success: false,
+      message: 'Failed to create user',
+    };
+  }
+}
 
 /**
  * List users with pagination, search, and filtering
@@ -973,4 +1063,3 @@ export default {
   hashPassword,
   verifyPassword,
 };
-
