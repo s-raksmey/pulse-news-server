@@ -290,6 +290,7 @@ export const schema = createSchema({
       listUsers(input: ListUsersInput!): UserListResult!
       getUserById(id: ID!): User!
       getUserStats: UserStats!
+      getBasicStats: BasicStats!
       getUserActivity(userId: ID, limit: Int = 50): [ActivityLog!]!
     }
 
@@ -487,6 +488,11 @@ export const schema = createSchema({
       admin: Int!
       editor: Int!
       author: Int!
+    }
+
+    type BasicStats {
+      totalUsers: Int!
+      totalArticles: Int!
     }
 
     type ActivityLog {
@@ -865,6 +871,36 @@ export const schema = createSchema({
         const { getUserStats } = await import('../services/userManagementService.js');
         
         return getUserStats();
+      },
+
+      getBasicStats: async (
+        _: unknown,
+        __: unknown,
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        // Note: Only requires authentication, not admin role
+        
+        try {
+          // Get basic counts that are safe for all authenticated users
+          const totalUsers = await prisma.user.count({
+            where: { isActive: true }
+          });
+          
+          const totalArticles = await prisma.article.count();
+          
+          return {
+            totalUsers,
+            totalArticles
+          };
+        } catch (error) {
+          console.error('🔍 Backend Debug - Error in getBasicStats:', error);
+          // Return zeros if query fails
+          return {
+            totalUsers: 0,
+            totalArticles: 0
+          };
+        }
       },
 
       getUserActivity: async (
