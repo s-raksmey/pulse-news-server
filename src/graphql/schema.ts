@@ -1048,29 +1048,14 @@ export const schema = createSchema({
           if (category) {
             categoryAssignmentLog = `✅ Found category: ${category.slug} (${category.name})`;
           } else {
-            // Category not found - try to provide helpful feedback
+            // Category not found - return error with available categories
             const availableCategories = await db.category.findMany({
               select: { slug: true, name: true },
               orderBy: { slug: 'asc' }
             });
 
-            categoryAssignmentLog = `❌ Category "${data.categorySlug}" not found. Available: [${availableCategories.map(c => c.slug).join(', ')}]`;
-            
-            // Try to find a fallback category based on topic
-            if (data.topic && availableCategories.length > 0) {
-              // Simple fallback logic - you can enhance this
-              const fallbackCategory = availableCategories.find(c => 
-                c.slug === 'tech' || c.slug === 'world'
-              ) || availableCategories[0];
-              
-              if (fallbackCategory) {
-                category = await db.category.findFirst({
-                  where: { slug: fallbackCategory.slug },
-                  select: { id: true, slug: true, name: true },
-                });
-                categoryAssignmentLog += ` → Using fallback: ${fallbackCategory.slug}`;
-              }
-            }
+            const availableSlugs = availableCategories.map(c => c.slug).join(', ');
+            throw new Error(`Invalid category "${data.categorySlug}". Available categories: ${availableSlugs}`);
           }
         } else {
           categoryAssignmentLog = "ℹ️ No categorySlug provided";
@@ -1083,11 +1068,6 @@ export const schema = createSchema({
           assignedCategory: category ? { id: category.id, slug: category.slug, name: category.name } : null,
           log: categoryAssignmentLog
         });
-
-        // Warning if still no category assigned
-        if (data.categorySlug && !category) {
-          console.warn(`⚠️ CRITICAL: Failed to assign any category for article "${data.title}". This will result in null category in admin interface.`);
-        }
 
         const status = data.status ?? "DRAFT";
 
