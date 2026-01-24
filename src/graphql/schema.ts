@@ -7,6 +7,7 @@ import { GraphQLContext, requireAuth, requireEditor, requireAdmin } from "../mid
 
 import { searchArticles, getSearchSuggestions, SearchInput } from "../services/searchService";
 import { getRelatedArticles, RelatedArticlesInput } from "../services/relatedArticlesService";
+import { SETTINGS_CONFIG, getSettingConfig } from "../data/settings-config";
 
 /**
  * IMPORTANT:
@@ -160,6 +161,17 @@ export const schema = createSchema({
       ARCHIVED
     }
 
+    enum SettingType {
+      SITE
+      EMAIL
+      SEO
+      CONTENT
+      USER_MANAGEMENT
+      API
+      THEME
+      MAINTENANCE
+    }
+
     type Category {
       id: ID!
       name: String!
@@ -217,6 +229,19 @@ export const schema = createSchema({
       role: UserRole!
       isActive: Boolean!
       createdAt: String!
+    }
+
+    type Setting {
+      id: ID!
+      key: String!
+      value: JSON!
+      type: SettingType!
+      label: String!
+      description: String
+      isPublic: Boolean!
+      isRequired: Boolean!
+      createdAt: String!
+      updatedAt: String!
     }
 
     type AuthResponse {
@@ -299,6 +324,11 @@ export const schema = createSchema({
       getUserStats: UserStats!
       getBasicStats: BasicStats!
       getUserActivity(userId: ID, limit: Int = 50): [ActivityLog!]!
+      
+      # Settings queries
+      settings(type: SettingType): [Setting!]!
+      setting(key: String!): Setting
+      publicSettings: [Setting!]!
     }
 
     type Mutation {
@@ -330,6 +360,11 @@ export const schema = createSchema({
       resetPassword(input: ResetPasswordInput!): PasswordResetResult!
       bulkUpdateUserRoles(userIds: [ID!]!, role: UserRole!): UserManagementResult!
       bulkUpdateUserStatus(userIds: [ID!]!, isActive: Boolean!): UserManagementResult!
+      
+      # Settings mutations
+      updateSetting(input: UpdateSettingInput!): Setting!
+      updateSettings(input: [UpdateSettingInput!]!): [Setting!]!
+      resetSetting(key: String!): Setting!
     }
 
     type Topic {
@@ -563,6 +598,11 @@ export const schema = createSchema({
       currentPassword: String!
       newPassword: String!
     }
+
+    input UpdateSettingInput {
+      key: String!
+      value: JSON!
+    }
   `,
 
   resolvers: {
@@ -579,6 +619,11 @@ export const schema = createSchema({
 
     User: {
       createdAt: (p: any) => toIso(p.createdAt),
+    },
+
+    Setting: {
+      createdAt: (p: any) => toIso(p.createdAt),
+      updatedAt: (p: any) => toIso(p.updatedAt),
     },
 
     Article: {
@@ -931,6 +976,46 @@ export const schema = createSchema({
         
         return getUserActivity(userId, limit);
       },
+
+      // Settings queries
+      settings: async (_: unknown, { type }: { type?: string }, context: GraphQLContext) => {
+        // Public settings can be accessed by anyone, private settings require admin
+        const isAdmin = context.user?.role === 'ADMIN';
+        
+        const where: any = {};
+        if (type) where.type = type;
+        
+        const settings = await db.setting.findMany({
+          where,
+          orderBy: { key: 'asc' }
+        });
+        
+        // Filter out private settings for non-admin users
+        return settings.filter(setting => setting.isPublic || isAdmin);
+      },
+
+      setting: async (_: unknown, { key }: { key: string }, context: GraphQLContext) => {
+        const setting = await db.setting.findUnique({
+          where: { key }
+        });
+        
+        if (!setting) return null;
+        
+        // Check if user can access this setting
+        const isAdmin = context.user?.role === 'ADMIN';
+        if (!setting.isPublic && !isAdmin) {
+          throw new Error('Access denied: This setting is private');
+        }
+        
+        return setting;
+      },
+
+      publicSettings: async () => {
+        return db.setting.findMany({
+          where: { isPublic: true },
+          orderBy: { key: 'asc' }
+        });
+      },
     },
 
     Mutation: {
@@ -949,23 +1034,59 @@ export const schema = createSchema({
         const data = ArticleInput.parse(input);
         const includeBreaking = await hasBreakingColumn();
 
-        const category = data.categorySlug
-          ? await db.category.findFirst({
-              where: { slug: data.categorySlug },
-              select: { id: true },
-            })
-          : null;
+        // Enhanced category assignment with validation and fallback
+        let category = null;
+        let categoryAssignmentLog = "";
 
-        // Debug logging
-        console.log('🔍 Category lookup debug:', {
-          categorySlug: data.categorySlug,
-          foundCategory: category,
-          categoryId: category?.id
+        if (data.categorySlug) {
+          // Try to find the requested category
+          category = await db.category.findFirst({
+            where: { slug: data.categorySlug },
+            select: { id: true, slug: true, name: true },
+          });
+
+          if (category) {
+            categoryAssignmentLog = `✅ Found category: ${category.slug} (${category.name})`;
+          } else {
+            // Category not found - try to provide helpful feedback
+            const availableCategories = await db.category.findMany({
+              select: { slug: true, name: true },
+              orderBy: { slug: 'asc' }
+            });
+
+            categoryAssignmentLog = `❌ Category "${data.categorySlug}" not found. Available: [${availableCategories.map(c => c.slug).join(', ')}]`;
+            
+            // Try to find a fallback category based on topic
+            if (data.topic && availableCategories.length > 0) {
+              // Simple fallback logic - you can enhance this
+              const fallbackCategory = availableCategories.find(c => 
+                c.slug === 'tech' || c.slug === 'world'
+              ) || availableCategories[0];
+              
+              if (fallbackCategory) {
+                category = await db.category.findFirst({
+                  where: { slug: fallbackCategory.slug },
+                  select: { id: true, slug: true, name: true },
+                });
+                categoryAssignmentLog += ` → Using fallback: ${fallbackCategory.slug}`;
+              }
+            }
+          }
+        } else {
+          categoryAssignmentLog = "ℹ️ No categorySlug provided";
+        }
+
+        // Comprehensive debug logging
+        console.log('🔍 Category assignment debug:', {
+          requestedCategorySlug: data.categorySlug,
+          topic: data.topic,
+          assignedCategory: category ? { id: category.id, slug: category.slug, name: category.name } : null,
+          log: categoryAssignmentLog
         });
 
-        // If categorySlug is provided but no category found, log warning
+        // Warning if still no category assigned
         if (data.categorySlug && !category) {
-          console.warn(`⚠️ Category not found for slug: "${data.categorySlug}". Available categories should be seeded from MEGA_NAV.`);
+          console.warn(`⚠️ CRITICAL: Failed to assign any category for article "${data.title}". This will result in null category in admin interface.`);
         }
 
         const status = data.status ?? "DRAFT";
@@ -1393,6 +1514,124 @@ export const schema = createSchema({
         const { bulkUpdateUserStatus } = await import('../services/userManagementService.js');
         
         return bulkUpdateUserStatus(userIds, isActive, context.user!.id);
+      },
+
+      // Settings mutations
+      updateSetting: async (
+        _: unknown,
+        { input }: { input: { key: string; value: any } },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        
+        const { key, value } = input;
+        
+        // Get setting configuration for validation
+        const config = getSettingConfig(key);
+        if (!config) {
+          throw new Error(`Unknown setting key: ${key}`);
+        }
+        
+        // TODO: Add validation based on config.validation
+        
+        // Upsert the setting
+        const setting = await db.setting.upsert({
+          where: { key },
+          update: { 
+            value,
+            updatedAt: new Date()
+          },
+          create: {
+            key,
+            value,
+            type: config.type,
+            label: config.label,
+            description: config.description,
+            isPublic: config.isPublic ?? false,
+            isRequired: config.isRequired ?? false
+          }
+        });
+        
+        return setting;
+      },
+
+      updateSettings: async (
+        _: unknown,
+        { input }: { input: Array<{ key: string; value: any }> },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        
+        const results = [];
+        
+        for (const { key, value } of input) {
+          // Get setting configuration for validation
+          const config = getSettingConfig(key);
+          if (!config) {
+            throw new Error(`Unknown setting key: ${key}`);
+          }
+          
+          // TODO: Add validation based on config.validation
+          
+          // Upsert the setting
+          const setting = await db.setting.upsert({
+            where: { key },
+            update: { 
+              value,
+              updatedAt: new Date()
+            },
+            create: {
+              key,
+              value,
+              type: config.type,
+              label: config.label,
+              description: config.description,
+              isPublic: config.isPublic ?? false,
+              isRequired: config.isRequired ?? false
+            }
+          });
+          
+          results.push(setting);
+        }
+        
+        return results;
+      },
+
+      resetSetting: async (
+        _: unknown,
+        { key }: { key: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireAdmin(context);
+        
+        // Get setting configuration
+        const config = getSettingConfig(key);
+        if (!config) {
+          throw new Error(`Unknown setting key: ${key}`);
+        }
+        
+        // Reset to default value
+        const setting = await db.setting.upsert({
+          where: { key },
+          update: { 
+            value: config.defaultValue,
+            updatedAt: new Date()
+          },
+          create: {
+            key,
+            value: config.defaultValue,
+            type: config.type,
+            label: config.label,
+            description: config.description,
+            isPublic: config.isPublic ?? false,
+            isRequired: config.isRequired ?? false
+          }
+        });
+        
+        return setting;
       },
     },
   },

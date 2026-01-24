@@ -20,6 +20,17 @@ enum UserRole {
   AUTHOR
 }
 
+enum SettingType {
+  SITE
+  EMAIL
+  SEO
+  CONTENT
+  USER_MANAGEMENT
+  API
+  THEME
+  MAINTENANCE
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -113,4 +124,18 @@ model Article {
   authorId String?
 
   tags ArticleTag[]
+}
+
+model Setting {
+  id          String      @id @default(cuid())
+  key         String      @unique
+  value       Json
+  type        SettingType
+  label       String
+  description String?
+  isPublic    Boolean     @default(false) // Whether this setting can be accessed publicly
+  isRequired  Boolean     @default(false) // Whether this setting is required for the system to function
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }

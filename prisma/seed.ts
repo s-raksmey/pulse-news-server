@@ -1,5 +1,6 @@
 import { PrismaClient, ArticleStatus } from "@prisma/client";
 import { MEGA_NAV } from "../src/data/mega-nav.js"; // ✅ ESM requires .js
+import { SETTINGS_CONFIG } from "../src/data/settings-config.js"; // ✅ ESM requires .js
 
 const prisma = new PrismaClient();
 
@@ -56,6 +57,27 @@ async function main() {
   }
 
   console.log("✅ Categories seeded");
+
+  /* ---------- Settings ---------- */
+  console.log("🌱 Seeding default settings...");
+  
+  for (const config of SETTINGS_CONFIG) {
+    await prisma.setting.upsert({
+      where: { key: config.key },
+      update: {}, // Don't overwrite existing settings
+      create: {
+        key: config.key,
+        value: config.defaultValue,
+        type: config.type,
+        label: config.label,
+        description: config.description,
+        isPublic: config.isPublic ?? false,
+        isRequired: config.isRequired ?? false,
+      },
+    });
+  }
+  
+  console.log(`✅ ${SETTINGS_CONFIG.length} settings seeded`);
 
   /* ---------- Sample Article (Tech) ---------- */
   await prisma.article.upsert({
