@@ -136,6 +136,13 @@ async function getArticleSelect() {
     createdAt: true,
     updatedAt: true,
     categoryId: true,
+    category: {
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+    },
   };
 }
 
