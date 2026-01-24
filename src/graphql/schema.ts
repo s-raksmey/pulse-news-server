@@ -956,6 +956,18 @@ export const schema = createSchema({
             })
           : null;
 
+        // Debug logging
+        console.log('🔍 Category lookup debug:', {
+          categorySlug: data.categorySlug,
+          foundCategory: category,
+          categoryId: category?.id
+        });
+
+        // If categorySlug is provided but no category found, log warning
+        if (data.categorySlug && !category) {
+          console.warn(`⚠️ Category not found for slug: "${data.categorySlug}". Available categories should be seeded from MEGA_NAV.`);
+        }
+
         const status = data.status ?? "DRAFT";
 
         const payload: any = {
