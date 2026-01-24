@@ -949,23 +949,59 @@ export const schema = createSchema({
         const data = ArticleInput.parse(input);
         const includeBreaking = await hasBreakingColumn();
 
-        const category = data.categorySlug
-          ? await db.category.findFirst({
-              where: { slug: data.categorySlug },
-              select: { id: true },
-            })
-          : null;
+        // Enhanced category assignment with validation and fallback
+        let category = null;
+        let categoryAssignmentLog = "";
 
-        // Debug logging
-        console.log('🔍 Category lookup debug:', {
-          categorySlug: data.categorySlug,
-          foundCategory: category,
-          categoryId: category?.id
+        if (data.categorySlug) {
+          // Try to find the requested category
+          category = await db.category.findFirst({
+            where: { slug: data.categorySlug },
+            select: { id: true, slug: true, name: true },
+          });
+
+          if (category) {
+            categoryAssignmentLog = `✅ Found category: ${category.slug} (${category.name})`;
+          } else {
+            // Category not found - try to provide helpful feedback
+            const availableCategories = await db.category.findMany({
+              select: { slug: true, name: true },
+              orderBy: { slug: 'asc' }
+            });
+
+            categoryAssignmentLog = `❌ Category "${data.categorySlug}" not found. Available: [${availableCategories.map(c => c.slug).join(', ')}]`;
+            
+            // Try to find a fallback category based on topic
+            if (data.topic && availableCategories.length > 0) {
+              // Simple fallback logic - you can enhance this
+              const fallbackCategory = availableCategories.find(c => 
+                c.slug === 'tech' || c.slug === 'world'
+              ) || availableCategories[0];
+              
+              if (fallbackCategory) {
+                category = await db.category.findFirst({
+                  where: { slug: fallbackCategory.slug },
+                  select: { id: true, slug: true, name: true },
+                });
+                categoryAssignmentLog += ` → Using fallback: ${fallbackCategory.slug}`;
+              }
+            }
+          }
+        } else {
+          categoryAssignmentLog = "ℹ️ No categorySlug provided";
+        }
+
+        // Comprehensive debug logging
+        console.log('🔍 Category assignment debug:', {
+          requestedCategorySlug: data.categorySlug,
+          topic: data.topic,
+          assignedCategory: category ? { id: category.id, slug: category.slug, name: category.name } : null,
+          log: categoryAssignmentLog
         });
 
-        // If categorySlug is provided but no category found, log warning
+        // Warning if still no category assigned
         if (data.categorySlug && !category) {
-          console.warn(`⚠️ Category not found for slug: "${data.categorySlug}". Available categories should be seeded from MEGA_NAV.`);
+          console.warn(`⚠️ CRITICAL: Failed to assign any category for article "${data.title}". This will result in null category in admin interface.`);
         }
 
         const status = data.status ?? "DRAFT";
