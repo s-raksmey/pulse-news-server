@@ -251,6 +251,83 @@ export const schema = createSchema({
       user: User
     }
 
+    # Workflow and Permission Types
+    enum WorkflowAction {
+      SAVE_DRAFT
+      SUBMIT_FOR_REVIEW
+      APPROVE
+      REJECT
+      PUBLISH
+      UNPUBLISH
+      ARCHIVE
+    }
+
+    type WorkflowActionResult {
+      success: Boolean!
+      message: String!
+      article: Article
+    }
+
+    type BulkWorkflowActionResult {
+      success: Boolean!
+      message: String!
+      processedCount: Int!
+      failedCount: Int!
+      results: [WorkflowActionItemResult!]!
+    }
+
+    type WorkflowActionItemResult {
+      articleId: ID!
+      success: Boolean!
+      message: String!
+    }
+
+    type ReviewQueue {
+      articles: [Article!]!
+      totalCount: Int!
+      hasMore: Boolean!
+    }
+
+    type WorkflowStats {
+      articlesInReview: Int!
+      articlesPublishedToday: Int!
+      articlesRejectedToday: Int!
+      averageReviewTime: Float!
+      topAuthors: [AuthorStats!]!
+    }
+
+    type AuthorStats {
+      name: String!
+      articlesSubmitted: Int!
+    }
+
+    type PermissionSummary {
+      role: String!
+      permissions: [String!]!
+      description: String!
+    }
+
+    input WorkflowActionInput {
+      articleId: ID!
+      action: WorkflowAction!
+      reason: String
+      notifyAuthor: Boolean = true
+    }
+
+    input BulkWorkflowActionInput {
+      articleIds: [ID!]!
+      action: WorkflowAction!
+      reason: String
+      notifyAuthors: Boolean = true
+    }
+
+    input ReviewQueueFilters {
+      categoryId: ID
+      authorId: ID
+      limit: Int = 20
+      offset: Int = 0
+    }
+
     input RegisterInput {
       email: String!
       password: String!
@@ -325,6 +402,12 @@ export const schema = createSchema({
       getBasicStats: BasicStats!
       getUserActivity(userId: ID, limit: Int = 50): [ActivityLog!]!
       
+      # Workflow queries
+      reviewQueue(filters: ReviewQueueFilters): ReviewQueue!
+      workflowStats(timeframe: String = "week"): WorkflowStats!
+      getPermissionSummary(role: UserRole!): PermissionSummary!
+      getAvailableWorkflowActions(articleId: ID!): [WorkflowAction!]!
+      
       # Settings queries
       settings(type: SettingType): [Setting!]!
       setting(key: String!): Setting
@@ -360,6 +443,10 @@ export const schema = createSchema({
       resetPassword(input: ResetPasswordInput!): PasswordResetResult!
       bulkUpdateUserRoles(userIds: [ID!]!, role: UserRole!): UserManagementResult!
       bulkUpdateUserStatus(userIds: [ID!]!, isActive: Boolean!): UserManagementResult!
+      
+      # Workflow mutations
+      performWorkflowAction(input: WorkflowActionInput!): WorkflowActionResult!
+      performBulkWorkflowAction(input: BulkWorkflowActionInput!): BulkWorkflowActionResult!
       
       # Settings mutations
       updateSetting(input: UpdateSettingInput!): Setting!
@@ -1090,6 +1177,61 @@ export const schema = createSchema({
         console.log(`📊 Public settings query: ${validSettings.length}/${settings.length} valid settings returned`);
         return validSettings;
       },
+
+      // ============================================================================
+      // WORKFLOW QUERIES
+      // ============================================================================
+
+      reviewQueue: async (
+        _: unknown,
+        { filters }: { filters?: any },
+        context: GraphQLContext
+      ) => {
+        const { ArticleWorkflowService } = await import('../services/articleWorkflowService');
+        return await ArticleWorkflowService.getReviewQueue(context, filters || {});
+      },
+
+      workflowStats: async (
+        _: unknown,
+        { timeframe }: { timeframe?: string },
+        context: GraphQLContext
+      ) => {
+        const { ArticleWorkflowService } = await import('../services/articleWorkflowService');
+        return await ArticleWorkflowService.getWorkflowStats(context, timeframe as any);
+      },
+
+      getPermissionSummary: async (
+        _: unknown,
+        { role }: { role: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        const { PermissionService } = await import('../services/permissionService');
+        return PermissionService.getPermissionSummary(role as any);
+      },
+
+      getAvailableWorkflowActions: async (
+        _: unknown,
+        { articleId }: { articleId: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        
+        const article = await db.article.findUnique({
+          where: { id: articleId },
+          select: { status: true, authorId: true }
+        });
+
+        if (!article) {
+          throw new Error('Article not found');
+        }
+
+        const { PermissionService } = await import('../services/permissionService');
+        const userRole = context.user!.role as any;
+        const isOwner = article.authorId === context.user!.id;
+
+        return PermissionService.getAvailableWorkflowActions(userRole, article.status, isOwner);
+      },
     },
 
     Mutation: {
@@ -1106,6 +1248,81 @@ export const schema = createSchema({
         requireAuth(context);
         
         const data = ArticleInput.parse(input);
+        
+        // Import permission services
+        const { PermissionService, Permission } = await import('../services/permissionService');
+        const { AuditService, AuditEventType } = await import('../services/auditService');
+        
+        const userRole = context.user!.role as any;
+        
+        // Check if this is an update or create operation
+        let existingArticle = null;
+        if (id) {
+          existingArticle = await db.article.findUnique({
+            where: { id },
+            select: { id: true, authorId: true, status: true, title: true }
+          });
+          
+          if (!existingArticle) {
+            throw new Error('Article not found');
+          }
+        }
+        
+        // Permission checks for article operations
+        if (existingArticle) {
+          // Updating existing article
+          const isOwner = existingArticle.authorId === context.user!.id;
+          
+          if (!isOwner && !PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
+            await AuditService.logPermissionDenied(
+              context.user!.id,
+              'UPDATE_ARTICLE',
+              existingArticle.id,
+              'Article',
+              context.request
+            );
+            throw new Error('Permission denied: You can only edit your own articles');
+          }
+          
+          // Check if user can modify article features (featured, breaking, editor's pick)
+          const hasFeatureChanges = data.isFeatured !== undefined || 
+                                   data.isEditorsPick !== undefined || 
+                                   data.isBreaking !== undefined;
+          
+          if (hasFeatureChanges && !PermissionService.canSetArticleFeatures(userRole)) {
+            throw new Error('Permission denied: You cannot set article features (featured, breaking news, editor\'s pick)');
+          }
+          
+          // Check if user can change article status
+          if (data.status && data.status !== existingArticle.status) {
+            if (!PermissionService.canPerformWorkflowAction(userRole, existingArticle.status, data.status, isOwner)) {
+              throw new Error(`Permission denied: Cannot change article status from ${existingArticle.status} to ${data.status}`);
+            }
+          }
+        } else {
+          // Creating new article
+          if (!PermissionService.hasPermission(userRole, Permission.CREATE_ARTICLE)) {
+            await AuditService.logPermissionDenied(
+              context.user!.id,
+              'CREATE_ARTICLE',
+              undefined,
+              'Article',
+              context.request
+            );
+            throw new Error('Permission denied: You cannot create articles');
+          }
+          
+          // Check if user can set article features on creation
+          const hasFeatureSettings = data.isFeatured || data.isEditorsPick || data.isBreaking;
+          if (hasFeatureSettings && !PermissionService.canSetArticleFeatures(userRole)) {
+            throw new Error('Permission denied: You cannot set article features (featured, breaking news, editor\'s pick)');
+          }
+          
+          // Authors can only create drafts or submit for review
+          if (userRole === 'AUTHOR' && data.status && !['DRAFT', 'REVIEW'].includes(data.status)) {
+            throw new Error('Permission denied: Authors can only create drafts or submit articles for review');
+          }
+        }
         const includeBreaking = await hasBreakingColumn();
 
         // Enhanced category assignment with validation and fallback
@@ -1234,6 +1451,24 @@ export const schema = createSchema({
           }
         }
 
+        // Log the article operation
+        const eventType = existingArticle ? AuditEventType.ARTICLE_UPDATED : AuditEventType.ARTICLE_CREATED;
+        await AuditService.logArticleEvent(
+          eventType,
+          context.user!.id,
+          article.id,
+          {
+            title: article.title,
+            status: article.status,
+            isUpdate: !!existingArticle,
+            changes: existingArticle ? {
+              statusChanged: data.status && data.status !== existingArticle.status,
+              featuresChanged: data.isFeatured !== undefined || data.isEditorsPick !== undefined || data.isBreaking !== undefined
+            } : undefined
+          },
+          context.request
+        );
+
         return article;
       },
 
@@ -1268,12 +1503,38 @@ export const schema = createSchema({
         return true;
       },
 
-      deleteArticle: async (_: unknown, { id }: { id: string }) => {
+      deleteArticle: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
+        requireAuth(context);
+        
         const article = await db.article.findUnique({
           where: { id },
-          select: { id: true },
+          select: { id: true, authorId: true, title: true, status: true },
         });
         if (!article) return false;
+
+        // Import permission services
+        const { PermissionService, Permission } = await import('../services/permissionService');
+        const { AuditService, AuditEventType } = await import('../services/auditService');
+        
+        const userRole = context.user!.role as any;
+        const isOwner = article.authorId === context.user!.id;
+        
+        // Check permissions for article deletion
+        if (!isOwner && !PermissionService.hasPermission(userRole, Permission.DELETE_ANY_ARTICLE)) {
+          await AuditService.logPermissionDenied(
+            context.user!.id,
+            'DELETE_ARTICLE',
+            id,
+            'Article',
+            context.request
+          );
+          throw new Error('Permission denied: You can only delete your own articles');
+        }
+        
+        // Authors cannot delete published articles
+        if (isOwner && userRole === 'AUTHOR' && article.status === 'PUBLISHED') {
+          throw new Error('Permission denied: You cannot delete published articles');
+        }
 
         await db.articleTag.deleteMany({
           where: { articleId: id },
@@ -1283,6 +1544,19 @@ export const schema = createSchema({
           where: { id },
           select: { id: true },
         });
+
+        // Log the article deletion
+        await AuditService.logArticleEvent(
+          AuditEventType.ARTICLE_DELETED,
+          context.user!.id,
+          id,
+          {
+            title: article.title,
+            status: article.status,
+            wasOwner: isOwner
+          },
+          context.request
+        );
 
         return true;
       },
@@ -1687,6 +1961,27 @@ export const schema = createSchema({
         
         return setting;
       },
-    },
+
+      // ============================================================================
+      // WORKFLOW MUTATIONS
+      // ============================================================================
+
+      performWorkflowAction: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        const { ArticleWorkflowService } = await import('../services/articleWorkflowService');
+        return await ArticleWorkflowService.performWorkflowAction(context, input);
+      },
+
+      performBulkWorkflowAction: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        const { ArticleWorkflowService } = await import('../services/articleWorkflowService');
+        return await ArticleWorkflowService.performBulkWorkflowAction(context, input);
+      },
   },
 });
