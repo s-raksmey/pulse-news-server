@@ -1983,5 +1983,6 @@ export const schema = createSchema({
         const { ArticleWorkflowService } = await import('../services/articleWorkflowService');
         return await ArticleWorkflowService.performBulkWorkflowAction(context, input);
       },
+    },
   },
 });
