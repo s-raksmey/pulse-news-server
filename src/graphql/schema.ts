@@ -990,8 +990,35 @@ export const schema = createSchema({
           orderBy: { key: 'asc' }
         });
         
-        // Filter out private settings for non-admin users
-        return settings.filter(setting => setting.isPublic || isAdmin);
+        // Filter out private settings for non-admin users and handle corrupted JSON values
+        const validSettings = settings
+          .filter(setting => setting.isPublic || isAdmin)
+          .filter(setting => {
+            // Check if the value is valid JSON
+            try {
+              if (setting.value === null || setting.value === undefined) {
+                console.warn(`⚠️  Setting ${setting.key} has null/undefined value, skipping`);
+                return false;
+              }
+              
+              // Check for asterisk corruption
+              const valueStr = String(setting.value);
+              if (valueStr.includes('*') && valueStr.trim() === '*') {
+                console.warn(`⚠️  Setting ${setting.key} has corrupted value: ${valueStr}, skipping`);
+                return false;
+              }
+              
+              // Try to parse as JSON to validate
+              JSON.parse(JSON.stringify(setting.value));
+              return true;
+            } catch (error) {
+              console.warn(`⚠️  Setting ${setting.key} has invalid JSON value: ${setting.value}, skipping`);
+              return false;
+            }
+          });
+        
+        console.log(`📊 Settings query: ${validSettings.length}/${settings.length} valid settings returned`);
+        return validSettings;
       },
 
       setting: async (_: unknown, { key }: { key: string }, context: GraphQLContext) => {
@@ -1007,14 +1034,61 @@ export const schema = createSchema({
           throw new Error('Access denied: This setting is private');
         }
         
-        return setting;
+        // Validate JSON value before returning
+        try {
+          if (setting.value === null || setting.value === undefined) {
+            console.warn(`⚠️  Setting ${setting.key} has null/undefined value`);
+            return null;
+          }
+          
+          // Check for asterisk corruption
+          const valueStr = String(setting.value);
+          if (valueStr.includes('*') && valueStr.trim() === '*') {
+            console.warn(`⚠️  Setting ${setting.key} has corrupted value: ${valueStr}`);
+            return null;
+          }
+          
+          // Try to parse as JSON to validate
+          JSON.parse(JSON.stringify(setting.value));
+          return setting;
+        } catch (error) {
+          console.warn(`⚠️  Setting ${setting.key} has invalid JSON value: ${setting.value}`);
+          return null;
+        }
       },
 
       publicSettings: async () => {
-        return db.setting.findMany({
+        const settings = await db.setting.findMany({
           where: { isPublic: true },
           orderBy: { key: 'asc' }
         });
+        
+        // Filter out corrupted JSON values
+        const validSettings = settings.filter(setting => {
+          try {
+            if (setting.value === null || setting.value === undefined) {
+              console.warn(`⚠️  Public setting ${setting.key} has null/undefined value, skipping`);
+              return false;
+            }
+            
+            // Check for asterisk corruption
+            const valueStr = String(setting.value);
+            if (valueStr.includes('*') && valueStr.trim() === '*') {
+              console.warn(`⚠️  Public setting ${setting.key} has corrupted value: ${valueStr}, skipping`);
+              return false;
+            }
+            
+            // Try to parse as JSON to validate
+            JSON.parse(JSON.stringify(setting.value));
+            return true;
+          } catch (error) {
+            console.warn(`⚠️  Public setting ${setting.key} has invalid JSON value: ${setting.value}, skipping`);
+            return false;
+          }
+        });
+        
+        console.log(`📊 Public settings query: ${validSettings.length}/${settings.length} valid settings returned`);
+        return validSettings;
       },
     },
 
