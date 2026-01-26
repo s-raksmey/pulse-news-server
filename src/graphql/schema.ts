@@ -761,7 +761,16 @@ export const schema = createSchema({
       categories: async () =>
         db.category.findMany({ orderBy: { name: "asc" } }),
 
-      articles: async (_: unknown, args: any) => {
+      articles: async (_: unknown, args: any, context: GraphQLContext) => {
+        // Require authentication for articles management
+        requireAuth(context);
+        
+        // Import permission services
+        const { PermissionService, Permission } = await import('../services/permissionService');
+        
+        const userRole = context.user!.role as any;
+        const userId = context.user!.id;
+        
         const where: any = {};
 
         if (args.status) where.status = args.status;
@@ -770,6 +779,16 @@ export const schema = createSchema({
         if (args.categorySlug) {
           where.category = { is: { slug: args.categorySlug } };
         }
+
+        // Apply role-based filtering
+        // Admin users can see all articles
+        // Editor users can see all articles (they have UPDATE_ANY_ARTICLE permission)
+        // Author users can only see their own articles
+        if (!PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
+          // Authors can only see their own articles
+          where.authorId = userId;
+        }
+        // Admin and Editor users can see all articles (no additional filtering needed)
 
         const select = await getArticleSelect();
 
