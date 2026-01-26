@@ -762,43 +762,77 @@ export const schema = createSchema({
         db.category.findMany({ orderBy: { name: "asc" } }),
 
       articles: async (_: unknown, args: any, context: GraphQLContext) => {
-        // Require authentication for articles management
-        requireAuth(context);
+        console.log('🔍 Articles resolver called with args:', JSON.stringify(args));
         
-        // Import permission services
-        const { PermissionService, Permission } = await import('../services/permissionService');
-        
-        const userRole = context.user!.role as any;
-        const userId = context.user!.id;
-        
-        const where: any = {};
+        try {
+          // Require authentication for articles management
+          requireAuth(context);
+          console.log('🔍 Authentication successful for user:', context.user!.email, 'role:', context.user!.role);
+          
+          // Import permission services with static import for better reliability
+          const { PermissionService, Permission } = await import('../services/permissionService');
+          console.log('🔍 Permission services imported successfully');
+          
+          const userRole = context.user!.role;
+          const userId = context.user!.id;
+          console.log('🔍 User details - ID:', userId, 'Role:', userRole, 'Email:', context.user!.email);
+          
+          // Build where clause for filtering
+          const where: any = {};
 
-        if (args.status) where.status = args.status;
-        if (args.topic) where.topic = args.topic;
+          if (args.status) {
+            where.status = args.status;
+            console.log('🔍 Filtering by status:', args.status);
+          }
+          
+          if (args.topic) {
+            where.topic = args.topic;
+            console.log('🔍 Filtering by topic:', args.topic);
+          }
 
-        if (args.categorySlug) {
-          where.category = { is: { slug: args.categorySlug } };
+          if (args.categorySlug) {
+            where.category = { is: { slug: args.categorySlug } };
+            console.log('🔍 Filtering by category slug:', args.categorySlug);
+          }
+
+          // Apply role-based filtering with explicit role checking
+          console.log('🔍 Checking permissions for role:', userRole);
+          
+          // Check if user has permission to see all articles
+          const hasUpdateAnyPermission = PermissionService.hasPermission(userRole as any, Permission.UPDATE_ANY_ARTICLE);
+          console.log('🔍 User has UPDATE_ANY_ARTICLE permission:', hasUpdateAnyPermission);
+          
+          if (!hasUpdateAnyPermission) {
+            // Authors can only see their own articles
+            where.authorId = userId;
+            console.log('🔍 Restricting to user\'s own articles only (authorId:', userId, ')');
+          } else {
+            console.log('🔍 User can access all articles (Admin/Editor permissions)');
+          }
+
+          console.log('🔍 Final database query where clause:', JSON.stringify(where, null, 2));
+
+          const select = await getArticleSelect();
+          console.log('🔍 Article select fields prepared');
+
+          const articles = await db.article.findMany({
+            where,
+            orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+            take: args.take ?? 20,
+            skip: args.skip ?? 0,
+            select,
+          });
+          
+          console.log('🔍 Database query completed. Found', articles.length, 'articles');
+          console.log('🔍 Article IDs found:', articles.map(a => a.id).slice(0, 5), articles.length > 5 ? '...' : '');
+          
+          return articles;
+          
+        } catch (error) {
+          console.error('🔍 Error in articles resolver:', error);
+          console.error('🔍 Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+          throw error; // Re-throw to let GraphQL handle the error response
         }
-
-        // Apply role-based filtering
-        // Admin users can see all articles
-        // Editor users can see all articles (they have UPDATE_ANY_ARTICLE permission)
-        // Author users can only see their own articles
-        if (!PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
-          // Authors can only see their own articles
-          where.authorId = userId;
-        }
-        // Admin and Editor users can see all articles (no additional filtering needed)
-
-        const select = await getArticleSelect();
-
-        return db.article.findMany({
-          where,
-          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-          take: args.take ?? 20,
-          skip: args.skip ?? 0,
-          select,
-        });
       },
 
       articleBySlug: async (_: unknown, { slug }: { slug: string }) => {

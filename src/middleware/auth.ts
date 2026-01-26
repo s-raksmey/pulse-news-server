@@ -76,9 +76,15 @@ export async function createAuthContext(request: Request): Promise<GraphQLContex
       return context;
     }
 
-    // Add authenticated user to context
-    context.user = createContextUser(payload);
-    console.log('🔍 Backend Debug - User added to context with role:', context.user.role);
+    // Add authenticated user to context using fresh database data
+    context.user = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      isActive: user.isActive,
+    };
+    console.log('🔍 Backend Debug - User added to context with role:', context.user.role, 'from database');
     
   } catch (error) {
     // Log error but don't throw - allow request to continue without auth
