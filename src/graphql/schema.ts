@@ -762,14 +762,19 @@ export const schema = createSchema({
         db.category.findMany({ orderBy: { name: "asc" } }),
 
       articles: async (_: unknown, args: any, context: GraphQLContext) => {
+        console.log('🔍 Articles resolver called with args:', args);
+        
         // Require authentication for articles management
         requireAuth(context);
+        console.log('🔍 Authentication passed for user:', context.user!.email, 'role:', context.user!.role);
         
         // Import permission services
         const { PermissionService, Permission } = await import('../services/permissionService');
+        console.log('🔍 Permission services imported successfully');
         
         const userRole = context.user!.role as any;
         const userId = context.user!.id;
+        console.log('🔍 User details - ID:', userId, 'Role:', userRole);
         
         const where: any = {};
 
@@ -784,21 +789,32 @@ export const schema = createSchema({
         // Admin users can see all articles
         // Editor users can see all articles (they have UPDATE_ANY_ARTICLE permission)
         // Author users can only see their own articles
-        if (!PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
+        const hasUpdateAnyPermission = PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE);
+        console.log('🔍 User has UPDATE_ANY_ARTICLE permission:', hasUpdateAnyPermission);
+        
+        if (!hasUpdateAnyPermission) {
           // Authors can only see their own articles
           where.authorId = userId;
+          console.log('🔍 Filtering to user\'s own articles only');
+        } else {
+          console.log('🔍 User can see all articles');
         }
         // Admin and Editor users can see all articles (no additional filtering needed)
 
+        console.log('🔍 Final where clause:', JSON.stringify(where, null, 2));
+
         const select = await getArticleSelect();
 
-        return db.article.findMany({
+        const articles = await db.article.findMany({
           where,
           orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
           take: args.take ?? 20,
           skip: args.skip ?? 0,
           select,
         });
+        
+        console.log('🔍 Found', articles.length, 'articles');
+        return articles;
       },
 
       articleBySlug: async (_: unknown, { slug }: { slug: string }) => {
