@@ -251,6 +251,34 @@ export const schema = createSchema({
       user: User
     }
 
+    type DebugAuthResponse {
+      success: Boolean!
+      message: String!
+      debug: DebugAuthDebugInfo
+    }
+
+    type DebugAuthDebugInfo {
+      hasContext: Boolean
+      hasUser: Boolean
+      timestamp: String!
+      user: DebugUserInfo
+      permissions: DebugPermissionInfo
+      error: String
+    }
+
+    type DebugUserInfo {
+      id: ID!
+      email: String!
+      name: String!
+      role: UserRole!
+      isActive: Boolean!
+    }
+
+    type DebugPermissionInfo {
+      CREATE_ARTICLE: Boolean!
+      UPDATE_ANY_ARTICLE: Boolean!
+    }
+
     # Workflow and Permission Types
     enum WorkflowAction {
       SAVE_DRAFT
@@ -366,6 +394,7 @@ export const schema = createSchema({
     type Query {
       # Authentication queries
       me: AuthResponse!
+      debugAuth: DebugAuthResponse!
       
       # Content queries
       categories: [Category!]!
@@ -756,6 +785,60 @@ export const schema = createSchema({
         }
         
         return getCurrentUser(context.user.id);
+      },
+
+      debugAuth: async (_: unknown, __: unknown, context: GraphQLContext) => {
+        console.log('🔍 Debug Auth endpoint called');
+        
+        try {
+          // Import permission services
+          const { PermissionService, Permission } = await import('../services/permissionService');
+          
+          if (!context.user) {
+            return {
+              success: false,
+              message: 'No user in context',
+              debug: {
+                hasContext: !!context,
+                hasUser: false,
+                timestamp: new Date().toISOString(),
+              }
+            };
+          }
+
+          const userRole = context.user.role;
+          const hasCreateArticle = PermissionService.hasPermission(userRole as any, Permission.CREATE_ARTICLE);
+          const hasUpdateAny = PermissionService.hasPermission(userRole as any, Permission.UPDATE_ANY_ARTICLE);
+
+          return {
+            success: true,
+            message: 'Authentication debug info',
+            debug: {
+              user: {
+                id: context.user.id,
+                email: context.user.email,
+                name: context.user.name,
+                role: context.user.role,
+                isActive: context.user.isActive,
+              },
+              permissions: {
+                CREATE_ARTICLE: hasCreateArticle,
+                UPDATE_ANY_ARTICLE: hasUpdateAny,
+              },
+              timestamp: new Date().toISOString(),
+            }
+          };
+        } catch (error) {
+          console.error('🔍 Debug Auth error:', error);
+          return {
+            success: false,
+            message: 'Debug auth failed',
+            debug: {
+              error: error instanceof Error ? error.message : 'Unknown error',
+              timestamp: new Date().toISOString(),
+            }
+          };
+        }
       },
 
       categories: async () =>
