@@ -403,6 +403,7 @@ export const schema = createSchema({
         status: ArticleStatus
         categorySlug: String
         topic: String
+        authorId: ID
         take: Int = 20
         skip: Int = 0
       ): [Article!]!
@@ -878,6 +879,11 @@ export const schema = createSchema({
             console.log('🔍 Filtering by category slug:', args.categorySlug);
           }
 
+          if (args.authorId) {
+            where.authorId = args.authorId;
+            console.log('🔍 Filtering by author ID:', args.authorId);
+          }
+
           // Apply role-based filtering with explicit role checking
           console.log('🔍 Checking permissions for role:', userRole);
           
@@ -885,12 +891,14 @@ export const schema = createSchema({
           const hasUpdateAnyPermission = PermissionService.hasPermission(userRole as any, Permission.UPDATE_ANY_ARTICLE);
           console.log('🔍 User has UPDATE_ANY_ARTICLE permission:', hasUpdateAnyPermission);
           
-          if (!hasUpdateAnyPermission) {
-            // Authors can only see their own articles
+          if (!hasUpdateAnyPermission && !args.authorId) {
+            // Authors can only see their own articles (unless authorId is explicitly provided)
             where.authorId = userId;
             console.log('🔍 Restricting to user\'s own articles only (authorId:', userId, ')');
-          } else {
+          } else if (hasUpdateAnyPermission && !args.authorId) {
             console.log('🔍 User can access all articles (Admin/Editor permissions)');
+          } else if (args.authorId) {
+            console.log('🔍 Filtering by explicit authorId parameter:', args.authorId);
           }
 
           console.log('🔍 Final database query where clause:', JSON.stringify(where, null, 2));
