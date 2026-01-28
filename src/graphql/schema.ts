@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { GraphQLJSONObject } from "graphql-scalars";
 import { z } from "zod";
 import { registerUser, loginUser, getCurrentUser } from "../resolvers/auth";
+import { debugArticles } from "../resolvers/debug";
 import { GraphQLContext, requireAuth, requireEditor, requireAdmin } from "../middleware/auth";
 
 import { searchArticles, getSearchSuggestions, SearchInput } from "../services/searchService";
@@ -395,6 +396,7 @@ export const schema = createSchema({
       # Authentication queries
       me: AuthResponse!
       debugAuth: DebugAuthResponse!
+      debugArticles: DebugAuthResponse!
       
       # Content queries
       categories: [Category!]!
@@ -809,6 +811,7 @@ export const schema = createSchema({
           const userRole = context.user.role;
           const hasCreateArticle = PermissionService.hasPermission(userRole as any, Permission.CREATE_ARTICLE);
           const hasUpdateAny = PermissionService.hasPermission(userRole as any, Permission.UPDATE_ANY_ARTICLE);
+          const hasReviewArticles = PermissionService.hasPermission(userRole as any, Permission.REVIEW_ARTICLES);
 
           return {
             success: true,
@@ -824,7 +827,9 @@ export const schema = createSchema({
               permissions: {
                 CREATE_ARTICLE: hasCreateArticle,
                 UPDATE_ANY_ARTICLE: hasUpdateAny,
+                REVIEW_ARTICLES: hasReviewArticles,
               },
+              rolePermissions: PermissionService.getRolePermissions(userRole as any),
               timestamp: new Date().toISOString(),
             }
           };
@@ -840,6 +845,8 @@ export const schema = createSchema({
           };
         }
       },
+
+      debugArticles,
 
       categories: async () =>
         db.category.findMany({ orderBy: { name: "asc" } }),

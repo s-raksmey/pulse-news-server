@@ -114,7 +114,13 @@ export class PermissionService {
    */
   static hasPermission(userRole: UserRole, permission: Permission): boolean {
     const rolePermissions = ROLE_PERMISSIONS[userRole];
-    return rolePermissions.includes(permission);
+    const hasPermission = rolePermissions?.includes(permission) || false;
+    
+    // Debug logging for permission checks
+    console.log(`🔍 Permission Check: Role "${userRole}" ${hasPermission ? 'HAS' : 'DOES NOT HAVE'} permission "${permission}"`);
+    console.log(`🔍 Available permissions for ${userRole}:`, rolePermissions?.map(p => p.toString()) || []);
+    
+    return hasPermission;
   }
 
   /**
