@@ -405,6 +405,7 @@ export const schema = createSchema({
         status: ArticleStatus
         categorySlug: String
         topic: String
+        authorId: ID
         take: Int = 20
         skip: Int = 0
       ): [Article!]!
@@ -885,19 +886,25 @@ export const schema = createSchema({
             console.log('🔍 Filtering by category slug:', args.categorySlug);
           }
 
-          // Apply role-based filtering with explicit role checking
-          console.log('🔍 Checking permissions for role:', userRole);
-          
-          // Check if user has permission to see all articles
-          const hasUpdateAnyPermission = PermissionService.hasPermission(userRole as any, Permission.UPDATE_ANY_ARTICLE);
-          console.log('🔍 User has UPDATE_ANY_ARTICLE permission:', hasUpdateAnyPermission);
-          
-          if (!hasUpdateAnyPermission) {
-            // Authors can only see their own articles
-            where.authorId = userId;
-            console.log('🔍 Restricting to user\'s own articles only (authorId:', userId, ')');
+          // Handle explicit authorId parameter (for "My Articles" page)
+          if (args.authorId) {
+            where.authorId = args.authorId;
+            console.log('🔍 Explicit authorId filter applied:', args.authorId);
           } else {
-            console.log('🔍 User can access all articles (Admin/Editor permissions)');
+            // Apply role-based filtering for general articles access
+            console.log('🔍 Checking permissions for role:', userRole);
+            
+            // Check if user has permission to see all articles
+            const hasUpdateAnyPermission = PermissionService.hasPermission(userRole as any, Permission.UPDATE_ANY_ARTICLE);
+            console.log('🔍 User has UPDATE_ANY_ARTICLE permission:', hasUpdateAnyPermission);
+            
+            if (!hasUpdateAnyPermission) {
+              // Authors can only see their own articles
+              where.authorId = userId;
+              console.log('🔍 Restricting to user\'s own articles only (authorId:', userId, ')');
+            } else {
+              console.log('🔍 User can access all articles (Admin/Editor permissions)');
+            }
           }
 
           console.log('🔍 Final database query where clause:', JSON.stringify(where, null, 2));
