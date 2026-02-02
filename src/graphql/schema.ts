@@ -145,6 +145,14 @@ async function getArticleSelect() {
         slug: true,
       },
     },
+    author: {
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+      },
+    },
   };
 }
 
@@ -214,6 +222,7 @@ export const schema = createSchema({
       updatedAt: String!
 
       category: Category
+      author: User
       tags: [Tag!]
     }
 
