@@ -19,7 +19,7 @@ export async function userHasRole(userId: string, role: UserRole): Promise<boole
       select: { role: true, isActive: true }
     });
     
-    return user?.isActive && user.role === role;
+    return (user?.isActive ?? false) && user?.role === role;
   } catch (error) {
     console.error('❌ Error checking user role:', error);
     return false;
@@ -36,7 +36,7 @@ export async function userHasAnyRole(userId: string, roles: UserRole[]): Promise
       select: { role: true, isActive: true }
     });
     
-    return user?.isActive && roles.includes(user.role as UserRole);
+    return (user?.isActive ?? false) && (user ? roles.includes(user.role as UserRole) : false);
   } catch (error) {
     console.error('❌ Error checking user roles:', error);
     return false;

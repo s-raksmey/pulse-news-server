@@ -1,9 +1,9 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { UserRole } from '@prisma/client';
 
 // JWT Secret - in production, this should be in environment variables
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_SECRET: string = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface JWTPayload {
   userId: string;
@@ -31,11 +31,13 @@ export function generateToken(user: AuthUser): string {
     name: user.name,
   };
 
-  return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: JWT_EXPIRES_IN,
+  const options: SignOptions = {
+    expiresIn: JWT_EXPIRES_IN as any,
     issuer: 'pulse-news-server',
     audience: 'pulse-news-clients',
-  });
+  };
+
+  return jwt.sign(payload, JWT_SECRET, options);
 }
 
 /**

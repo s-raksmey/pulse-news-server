@@ -38,7 +38,6 @@ function extractTopics(categorySlug: string): string[] {
    Seed
 ========================= */
 async function main() {
-  console.log("🌱 Seeding categories from MEGA_NAV...");
 
   const categoryMap: Record<string, string> = {};
 
@@ -56,10 +55,7 @@ async function main() {
     categoryMap[slug] = category.id;
   }
 
-  console.log("✅ Categories seeded");
-
   /* ---------- Settings ---------- */
-  console.log("🌱 Seeding default settings...");
   
   for (const config of SETTINGS_CONFIG) {
     await prisma.setting.upsert({
@@ -76,8 +72,6 @@ async function main() {
       },
     });
   }
-  
-  console.log(`✅ ${SETTINGS_CONFIG.length} settings seeded`);
 
   /* ---------- Sample Article (Tech) ---------- */
   await prisma.article.upsert({
@@ -152,8 +146,6 @@ async function main() {
       },
     },
   });
-
-  console.log("✅ Sample articles seeded");
 }
 
 /* =========================
@@ -161,7 +153,6 @@ async function main() {
 ========================= */
 main()
   .catch((e) => {
-    console.error("❌ Seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {

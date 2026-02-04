@@ -800,7 +800,6 @@ export const schema = createSchema({
       },
 
       debugAuth: async (_: unknown, __: unknown, context: GraphQLContext) => {
-        console.log('🔍 Debug Auth endpoint called');
         
         try {
           // Import permission services
@@ -844,7 +843,6 @@ export const schema = createSchema({
             }
           };
         } catch (error) {
-          console.error('🔍 Debug Auth error:', error);
           return {
             success: false,
             message: 'Debug auth failed',
@@ -862,12 +860,10 @@ export const schema = createSchema({
         db.category.findMany({ orderBy: { name: "asc" } }),
 
       articles: async (_: unknown, args: any, context: GraphQLContext) => {
-        console.log('🔍 Articles resolver called with args:', JSON.stringify(args));
         
         try {
           // Require authentication for articles management
           requireAuth(context);
-          console.log('🔍 Authentication successful for user:', context.user!.email, 'role:', context.user!.role);
           
           // Import permission services with static import for better reliability
           const { PermissionService, Permission } = await import('../services/permissionService');
@@ -882,17 +878,14 @@ export const schema = createSchema({
 
           if (args.status) {
             where.status = args.status;
-            console.log('🔍 Filtering by status:', args.status);
           }
           
           if (args.topic) {
             where.topic = args.topic;
-            console.log('🔍 Filtering by topic:', args.topic);
           }
 
           if (args.categorySlug) {
             where.category = { is: { slug: args.categorySlug } };
-            console.log('🔍 Filtering by category slug:', args.categorySlug);
           }
 
           // Handle explicit authorId parameter (for "My Articles" page)
@@ -905,21 +898,15 @@ export const schema = createSchema({
             
             // Check if user has permission to see all articles
             const hasUpdateAnyPermission = PermissionService.hasPermission(userRole as any, Permission.UPDATE_ANY_ARTICLE);
-            console.log('🔍 User has UPDATE_ANY_ARTICLE permission:', hasUpdateAnyPermission);
             
             if (!hasUpdateAnyPermission) {
               // Authors can only see their own articles
               where.authorId = userId;
-              console.log('🔍 Restricting to user\'s own articles only (authorId:', userId, ')');
             } else {
-              console.log('🔍 User can access all articles (Admin/Editor permissions)');
             }
           }
 
-          console.log('🔍 Final database query where clause:', JSON.stringify(where, null, 2));
-
           const select = await getArticleSelect();
-          console.log('🔍 Article select fields prepared');
 
           const articles = await db.article.findMany({
             where,
@@ -929,14 +916,9 @@ export const schema = createSchema({
             select,
           });
           
-          console.log('🔍 Database query completed. Found', articles.length, 'articles');
-          console.log('🔍 Article IDs found:', articles.map(a => a.id).slice(0, 5), articles.length > 5 ? '...' : '');
-          
           return articles;
           
         } catch (error) {
-          console.error('🔍 Error in articles resolver:', error);
-          console.error('🔍 Error stack:', error instanceof Error ? error.stack : 'No stack trace');
           throw error; // Re-throw to let GraphQL handle the error response
         }
       },
@@ -1238,8 +1220,8 @@ export const schema = createSchema({
         
         // Filter out private settings for non-admin users and handle corrupted JSON values
         const validSettings = settings
-          .filter(setting => setting.isPublic || isAdmin)
-          .filter(setting => {
+          .filter((setting: { isPublic: any; }) => setting.isPublic || isAdmin)
+          .filter((setting: { value: null | undefined; key: any; }) => {
             // Check if the value is valid JSON
             try {
               if (setting.value === null || setting.value === undefined) {
@@ -1258,12 +1240,10 @@ export const schema = createSchema({
               JSON.parse(JSON.stringify(setting.value));
               return true;
             } catch (error) {
-              console.warn(`⚠️  Setting ${setting.key} has invalid JSON value: ${setting.value}, skipping`);
               return false;
             }
           });
         
-        console.log(`📊 Settings query: ${validSettings.length}/${settings.length} valid settings returned`);
         return validSettings;
       },
 
@@ -1283,14 +1263,12 @@ export const schema = createSchema({
         // Validate JSON value before returning
         try {
           if (setting.value === null || setting.value === undefined) {
-            console.warn(`⚠️  Setting ${setting.key} has null/undefined value`);
             return null;
           }
           
           // Check for asterisk corruption
           const valueStr = String(setting.value);
           if (valueStr.includes('*') && valueStr.trim() === '*') {
-            console.warn(`⚠️  Setting ${setting.key} has corrupted value: ${valueStr}`);
             return null;
           }
           
@@ -1298,7 +1276,6 @@ export const schema = createSchema({
           JSON.parse(JSON.stringify(setting.value));
           return setting;
         } catch (error) {
-          console.warn(`⚠️  Setting ${setting.key} has invalid JSON value: ${setting.value}`);
           return null;
         }
       },
@@ -1310,17 +1287,15 @@ export const schema = createSchema({
         });
         
         // Filter out corrupted JSON values
-        const validSettings = settings.filter(setting => {
+        const validSettings = settings.filter((setting: { value: null | undefined; }) => {
           try {
             if (setting.value === null || setting.value === undefined) {
-              console.warn(`⚠️  Public setting ${setting.key} has null/undefined value, skipping`);
               return false;
             }
             
             // Check for asterisk corruption
             const valueStr = String(setting.value);
             if (valueStr.includes('*') && valueStr.trim() === '*') {
-              console.warn(`⚠️  Public setting ${setting.key} has corrupted value: ${valueStr}, skipping`);
               return false;
             }
             
@@ -1328,12 +1303,10 @@ export const schema = createSchema({
             JSON.parse(JSON.stringify(setting.value));
             return true;
           } catch (error) {
-            console.warn(`⚠️  Public setting ${setting.key} has invalid JSON value: ${setting.value}, skipping`);
             return false;
           }
         });
         
-        console.log(`📊 Public settings query: ${validSettings.length}/${settings.length} valid settings returned`);
         return validSettings;
       },
 
@@ -1505,20 +1478,12 @@ export const schema = createSchema({
               orderBy: { slug: 'asc' }
             });
 
-            const availableSlugs = availableCategories.map(c => c.slug).join(', ');
+            const availableSlugs = availableCategories.map((c: { slug: any; }) => c.slug).join(', ');
             throw new Error(`Invalid category "${data.categorySlug}". Available categories: ${availableSlugs}`);
           }
         } else {
           categoryAssignmentLog = "ℹ️ No categorySlug provided";
         }
-
-        // Comprehensive debug logging
-        console.log('🔍 Category assignment debug:', {
-          requestedCategorySlug: data.categorySlug,
-          topic: data.topic,
-          assignedCategory: category ? { id: category.id, slug: category.slug, name: category.name } : null,
-          log: categoryAssignmentLog
-        });
 
         const status = data.status ?? "DRAFT";
 

@@ -580,7 +580,10 @@ export function clearCache(): void {
  */
 export async function warmUpCache(articleSlugs: string[]): Promise<void> {
   const promises = articleSlugs.map(slug => 
-    getRelatedArticles({ slug, limit: 6, algorithm: 'hybrid' })
+    getRelatedArticles({
+      slug, limit: 6, algorithm: 'hybrid',
+      includeBreaking: false
+    })
   );
   
   await Promise.allSettled(promises);

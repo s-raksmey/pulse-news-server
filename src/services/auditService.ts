@@ -88,13 +88,9 @@ export class AuditService {
         timestamp: entry.timestamp || new Date(),
       };
 
-      // Log to console with structured format
-      console.log('🔍 AUDIT LOG:', JSON.stringify(logEntry, null, 2));
-
       // TODO: Store in database when audit log table is created
       // await prisma.auditLog.create({ data: logEntry });
     } catch (error) {
-      console.error('Failed to log audit event:', error);
       // Don't throw error to avoid breaking the main operation
     }
   }

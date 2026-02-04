@@ -8,7 +8,6 @@ const prisma = new PrismaClient();
  * and test articles to verify the role-based access control
  */
 async function main() {
-  console.log("🌱 Seeding test users and articles...");
 
   // Hash password for all test users
   const hashedPassword = await bcrypt.hash("password123", 10);
@@ -60,11 +59,6 @@ async function main() {
       isActive: true,
     },
   });
-
-  console.log("✅ Test users created:");
-  console.log(`  - Admin: ${admin.email} (${admin.role})`);
-  console.log(`  - Editor: ${editor.email} (${editor.role})`);
-  console.log(`  - Author: ${author.email} (${author.role})`);
 
   // Get or create a category for test articles
   const techCategory = await prisma.category.upsert({
@@ -185,38 +179,18 @@ async function main() {
     },
   });
 
-  console.log("✅ Test articles created:");
-  console.log("  - Author's Draft Article (DRAFT)");
-  console.log("  - Author's Article for Review (REVIEW)");
-  console.log("  - Author's Published Article (PUBLISHED)");
-  console.log("  - Editor's Featured Article (PUBLISHED, FEATURED)");
-
   // Verify the data
   const userCount = await prisma.user.count();
   const articleCount = await prisma.article.count();
-  
-  console.log(`\n📊 Database Summary:`);
-  console.log(`  - Total Users: ${userCount}`);
-  console.log(`  - Total Articles: ${articleCount}`);
   
   // Show articles by status for verification
   const draftCount = await prisma.article.count({ where: { status: ArticleStatus.DRAFT } });
   const reviewCount = await prisma.article.count({ where: { status: ArticleStatus.REVIEW } });
   const publishedCount = await prisma.article.count({ where: { status: ArticleStatus.PUBLISHED } });
-  
-  console.log(`  - Draft Articles: ${draftCount}`);
-  console.log(`  - Review Articles: ${reviewCount}`);
-  console.log(`  - Published Articles: ${publishedCount}`);
-
-  console.log("\n🔐 Test Login Credentials:");
-  console.log("  Admin:  admin@pulse-news.com / password123");
-  console.log("  Editor: editor@pulse-news.com / password123");
-  console.log("  Author: author@pulse-news.com / password123");
 }
 
 main()
   .catch((e) => {
-    console.error("❌ User seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {
