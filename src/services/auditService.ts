@@ -82,16 +82,27 @@ export class AuditService {
    */
   static async logEvent(entry: AuditLogEntry): Promise<void> {
     try {
-      // For now, we'll use console logging and could extend to database storage
-      const logEntry = {
-        ...entry,
-        timestamp: entry.timestamp || new Date(),
-      };
-
-      // TODO: Store in database when audit log table is created
-      // await prisma.auditLog.create({ data: logEntry });
+      // Store in database
+      await prisma.auditLog.create({
+        data: {
+          eventType: entry.eventType,
+          userId: entry.userId,
+          targetUserId: entry.targetUserId,
+          resourceId: entry.resourceId,
+          resourceType: entry.resourceType,
+          details: entry.details || null,
+          ipAddress: entry.ipAddress,
+          userAgent: entry.userAgent,
+          success: entry.success,
+          errorMessage: entry.errorMessage,
+        },
+      });
     } catch (error) {
       // Don't throw error to avoid breaking the main operation
+      // Log to console for debugging
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to log audit event:', error);
+      }
     }
   }
 
@@ -261,6 +272,87 @@ export class AuditService {
   }
 
   /**
+   * Log data change event with before/after comparison
+   */
+  static async logDataChange(
+    eventType: AuditEventType,
+    userId: string,
+    resourceId: string,
+    resourceType: string,
+    beforeData?: Record<string, any>,
+    afterData?: Record<string, any>,
+    request?: Request
+  ): Promise<void> {
+    // Calculate what changed
+    const changes: Record<string, { before: any; after: any }> = {};
+    
+    if (beforeData && afterData) {
+      const allKeys = new Set([
+        ...Object.keys(beforeData),
+        ...Object.keys(afterData),
+      ]);
+      
+      allKeys.forEach(key => {
+        const before = beforeData[key];
+        const after = afterData[key];
+        
+        if (JSON.stringify(before) !== JSON.stringify(after)) {
+          changes[key] = { before, after };
+        }
+      });
+    }
+    
+    await this.logEvent({
+      eventType,
+      userId,
+      resourceId,
+      resourceType,
+      success: true,
+      details: {
+        changes: Object.keys(changes).length > 0 ? changes : null,
+        changedFields: Object.keys(changes),
+        timestamp: new Date().toISOString(),
+      },
+      ipAddress: this.extractIpAddress(request),
+      userAgent: request?.headers.get('user-agent') || undefined,
+    });
+  }
+
+  /**
+   * Log bulk operation
+   */
+  static async logBulkOperation(
+    eventType: AuditEventType,
+    userId: string,
+    resourceType: string,
+    details: {
+      resourceIds: string[];
+      action: string;
+      results?: {
+        success: number;
+        failed: number;
+        errors?: string[];
+      };
+      metadata?: any;
+    },
+    request?: Request
+  ): Promise<void> {
+    await this.logEvent({
+      eventType,
+      userId,
+      resourceType,
+      success: details.results?.failed === 0 || !details.results,
+      details: {
+        ...details,
+        operationTime: new Date().toISOString(),
+        itemCount: details.resourceIds.length,
+      },
+      ipAddress: this.extractIpAddress(request),
+      userAgent: request?.headers.get('user-agent') || undefined,
+    });
+  }
+
+  /**
    * Create audit context from GraphQL context
    */
   static createAuditContext(context: GraphQLContext): {
@@ -301,20 +393,60 @@ export class AuditService {
   }
 
   /**
-   * Get audit logs (placeholder for future database implementation)
+   * Public method to get client IP from request
+   * Used by resolvers to capture IP address during auth operations
+   */
+  static getClientIp(request?: Request): string | undefined {
+    return this.extractIpAddress(request);
+  }
+
+  /**
+   * Get audit logs
    */
   static async getAuditLogs(filters: {
     userId?: string;
     eventType?: AuditEventType;
     resourceId?: string;
+    resourceType?: string;
     startDate?: Date;
     endDate?: Date;
     limit?: number;
     offset?: number;
   }): Promise<AuditLogEntry[]> {
-    // TODO: Implement database query when audit log table is created
-    console.log('Getting audit logs with filters:', filters);
-    return [];
+    const where: any = {};
+
+    if (filters.userId) where.userId = filters.userId;
+    if (filters.eventType) where.eventType = filters.eventType;
+    if (filters.resourceId) where.resourceId = filters.resourceId;
+    if (filters.resourceType) where.resourceType = filters.resourceType;
+    
+    if (filters.startDate || filters.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) where.createdAt.gte = filters.startDate;
+      if (filters.endDate) where.createdAt.lte = filters.endDate;
+    }
+
+    const logs = await prisma.auditLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: filters.limit || 100,
+      skip: filters.offset || 0,
+    });
+
+    return logs.map(log => ({
+      id: log.id,
+      eventType: log.eventType as AuditEventType,
+      userId: log.userId || undefined,
+      targetUserId: log.targetUserId || undefined,
+      resourceId: log.resourceId || undefined,
+      resourceType: log.resourceType || undefined,
+      details: log.details as any,
+      ipAddress: log.ipAddress || undefined,
+      userAgent: log.userAgent || undefined,
+      timestamp: log.createdAt,
+      success: log.success,
+      errorMessage: log.errorMessage || undefined,
+    }));
   }
 
   /**
@@ -326,13 +458,75 @@ export class AuditService {
     securityEvents: number;
     userActivity: number;
   }> {
-    // TODO: Implement database aggregation when audit log table is created
-    console.log('Getting audit stats for timeframe:', timeframe);
+    const now = new Date();
+    const startDate = new Date();
+    
+    switch (timeframe) {
+      case 'day':
+        startDate.setDate(now.getDate() - 1);
+        break;
+      case 'week':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+    }
+
+    // Get total events
+    const totalEvents = await prisma.auditLog.count({
+      where: {
+        createdAt: { gte: startDate },
+      },
+    });
+
+    // Get events by type
+    const eventTypeGroups = await prisma.auditLog.groupBy({
+      by: ['eventType'],
+      where: {
+        createdAt: { gte: startDate },
+      },
+      _count: true,
+    });
+
+    const eventsByType: Record<string, number> = {};
+    eventTypeGroups.forEach(group => {
+      eventsByType[group.eventType] = group._count;
+    });
+
+    // Count security events
+    const securityEventTypes = [
+      AuditEventType.PERMISSION_DENIED,
+      AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT,
+      AuditEventType.SUSPICIOUS_ACTIVITY,
+    ];
+    
+    const securityEvents = await prisma.auditLog.count({
+      where: {
+        createdAt: { gte: startDate },
+        eventType: { in: securityEventTypes },
+      },
+    });
+
+    // Count user activity events (logins, etc.)
+    const userActivityTypes = [
+      AuditEventType.USER_LOGIN,
+      AuditEventType.USER_LOGOUT,
+      AuditEventType.USER_REGISTRATION,
+    ];
+    
+    const userActivity = await prisma.auditLog.count({
+      where: {
+        createdAt: { gte: startDate },
+        eventType: { in: userActivityTypes },
+      },
+    });
+
     return {
-      totalEvents: 0,
-      eventsByType: {},
-      securityEvents: 0,
-      userActivity: 0,
+      totalEvents,
+      eventsByType,
+      securityEvents,
+      userActivity,
     };
   }
 }

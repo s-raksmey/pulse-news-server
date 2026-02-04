@@ -139,3 +139,24 @@ model Setting {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  eventType     String   // Type of event (e.g., USER_LOGIN, ARTICLE_CREATED)
+  userId        String?  // User who performed the action
+  targetUserId  String?  // User affected by the action (for user management events)
+  resourceId    String?  // ID of the resource affected (article, category, etc.)
+  resourceType  String?  // Type of resource (Article, Category, User, etc.)
+  details       Json?    // Additional event details
+  ipAddress     String?  // IP address of the user
+  userAgent     String?  // Browser/client user agent
+  success       Boolean  @default(true) // Whether the action was successful
+  errorMessage  String?  // Error message if action failed
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([resourceId])
+}

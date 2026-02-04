@@ -12,7 +12,6 @@
     "db:push": "prisma db push",
     "seed": "prisma db seed",
     "seed:users": "tsx prisma/seed-users.ts",
-    "test:rbac": "node test-rbac-fix.js",
     "check-categories": "tsx src/scripts/check-article-categories.ts",
     "diagnose-categories": "tsx src/scripts/diagnose-categories.ts",
     "fix-categories": "tsx src/scripts/fix-article-categories.ts --apply",
@@ -24,7 +23,6 @@
   "dependencies": {
     "@prisma/client": "^5.21.1",
     "bcrypt": "^6.0.0",
-    "bcryptjs": "^3.0.3",
     "graphql": "^16.8.1",
     "graphql-scalars": "^1.25.0",
     "graphql-yoga": "^5.1.1",
@@ -33,7 +31,6 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
-    "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.0.9",
     "prisma": "^5.21.1",

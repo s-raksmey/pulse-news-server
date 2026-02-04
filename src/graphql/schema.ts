@@ -345,6 +345,71 @@ export const schema = createSchema({
       description: String!
     }
 
+    # Audit Log Types
+    type AuditLog {
+      id: ID!
+      eventType: String!
+      
+      # User Information
+      userId: String
+      userEmail: String
+      targetUserId: String
+      targetUserEmail: String
+      
+      # Resource Information
+      resourceId: String
+      resourceType: String
+      resourceName: String
+      
+      # Request Information
+      ipAddress: String
+      userAgent: String
+      
+      # Event Status
+      success: Boolean!
+      errorMessage: String
+      
+      # Timing
+      createdAt: String!
+      
+      # Details
+      details: JSON
+      
+      # Computed Fields
+      action: String!
+      description: String!
+    }
+
+    type AuditLogConnection {
+      logs: [AuditLog!]!
+      totalCount: Int!
+      hasMore: Boolean!
+    }
+
+    type AuditStats {
+      totalEvents: Int!
+      eventsByType: JSON!
+      securityEvents: Int!
+      userActivity: Int!
+    }
+
+    input AuditLogFilters {
+      userId: String
+      eventType: String
+      resourceId: String
+      resourceType: String
+      startDate: String
+      endDate: String
+      limit: Int = 100
+      offset: Int = 0
+    }
+
+    enum AuditTimeframe {
+      day
+      week
+      month
+    }
+
     input WorkflowActionInput {
       articleId: ID!
       action: WorkflowAction!
@@ -453,6 +518,11 @@ export const schema = createSchema({
       settings(type: SettingType): [Setting!]!
       setting(key: String!): Setting
       publicSettings: [Setting!]!
+      
+      # Audit log queries
+      auditLogs(filters: AuditLogFilters): AuditLogConnection!
+      auditStats(timeframe: AuditTimeframe = week): AuditStats!
+      userAuditHistory(userId: ID!, limit: Int = 50): [AuditLog!]!
     }
 
     type Mutation {
@@ -752,6 +822,103 @@ export const schema = createSchema({
     Setting: {
       createdAt: (p: any) => toIso(p.createdAt),
       updatedAt: (p: any) => toIso(p.updatedAt),
+    },
+
+    AuditLog: {
+      createdAt: (p: any) => toIso(p.timestamp || p.createdAt),
+      
+      userEmail: async (p: any) => {
+        if (!p.userId) return null;
+        const user = await db.user.findUnique({
+          where: { id: p.userId },
+          select: { email: true },
+        });
+        return user?.email || null;
+      },
+      
+      targetUserEmail: async (p: any) => {
+        if (!p.targetUserId) return null;
+        const user = await db.user.findUnique({
+          where: { id: p.targetUserId },
+          select: { email: true },
+        });
+        return user?.email || null;
+      },
+      
+      resourceName: async (p: any) => {
+        if (!p.resourceId) return null;
+        
+        // Get resource name based on resource type
+        try {
+          if (p.resourceType === 'Article') {
+            const article = await db.article.findUnique({
+              where: { id: p.resourceId },
+              select: { title: true },
+            });
+            return article?.title || null;
+          } else if (p.resourceType === 'Category') {
+            const category = await db.category.findUnique({
+              where: { id: p.resourceId },
+              select: { name: true },
+            });
+            return category?.name || null;
+          } else if (p.resourceType === 'User') {
+            const user = await db.user.findUnique({
+              where: { id: p.resourceId },
+              select: { name: true },
+            });
+            return user?.name || null;
+          } else if (p.resourceType === 'Setting') {
+            // For settings, the resourceId is the setting key
+            return p.resourceId;
+          }
+        } catch (error) {
+          // Resource might have been deleted
+          return null;
+        }
+        
+        return null;
+      },
+      
+      action: (p: any) => {
+        // Format event type as readable action
+        const eventType = p.eventType as string;
+        return eventType
+          .split('_')
+          .map((word: string) => word.charAt(0) + word.slice(1).toLowerCase())
+          .join(' ');
+      },
+      
+      description: (p: any) => {
+        const eventType = p.eventType as string;
+        const success = p.success ? 'succeeded' : 'failed';
+        const resource = p.resourceType ? ` on ${p.resourceType}` : '';
+        
+        // Create human-readable description
+        const descriptions: Record<string, string> = {
+          'USER_LOGIN': `User login ${success}`,
+          'USER_LOGOUT': `User logout ${success}`,
+          'USER_REGISTRATION': `New user registration ${success}`,
+          'USER_CREATED': `User account created ${success}`,
+          'USER_UPDATED': `User profile updated ${success}`,
+          'USER_DELETED': `User account deleted ${success}`,
+          'USER_ROLE_CHANGED': `User role changed ${success}`,
+          'USER_STATUS_CHANGED': `User status changed ${success}`,
+          'ARTICLE_CREATED': `Article created ${success}`,
+          'ARTICLE_UPDATED': `Article updated ${success}`,
+          'ARTICLE_DELETED': `Article deleted ${success}`,
+          'ARTICLE_STATUS_CHANGED': `Article status changed ${success}`,
+          'ARTICLE_PUBLISHED': `Article published ${success}`,
+          'ARTICLE_UNPUBLISHED': `Article unpublished ${success}`,
+          'ARTICLE_FEATURED': `Article marked as featured ${success}`,
+          'ARTICLE_UNFEATURED': `Article removed from featured ${success}`,
+          'ARTICLE_BREAKING_SET': `Breaking news flag set ${success}`,
+          'ARTICLE_BREAKING_UNSET': `Breaking news flag removed ${success}`,
+          'PERMISSION_DENIED': `Access denied to ${resource}`,
+        };
+        
+        return descriptions[eventType] || eventType.replace(/_/g, ' ').toLowerCase();
+      },
     },
 
     Article: {
@@ -1311,6 +1478,67 @@ export const schema = createSchema({
       },
 
       // ============================================================================
+      // AUDIT LOG QUERIES
+      // ============================================================================
+
+      auditLogs: async (
+        _: unknown,
+        { filters }: { filters?: any },
+        context: GraphQLContext
+      ) => {
+        requireAdmin(context);
+        const { AuditService } = await import('../services/auditService');
+        
+        const logs = await AuditService.getAuditLogs({
+          userId: filters?.userId,
+          eventType: filters?.eventType,
+          resourceId: filters?.resourceId,
+          resourceType: filters?.resourceType,
+          startDate: filters?.startDate ? new Date(filters.startDate) : undefined,
+          endDate: filters?.endDate ? new Date(filters.endDate) : undefined,
+          limit: filters?.limit || 100,
+          offset: filters?.offset || 0,
+        });
+
+        const totalCount = logs.length; // You may want to add a separate count query
+        
+        return {
+          logs,
+          totalCount,
+          hasMore: logs.length === (filters?.limit || 100),
+        };
+      },
+
+      auditStats: async (
+        _: unknown,
+        { timeframe }: { timeframe?: 'day' | 'week' | 'month' },
+        context: GraphQLContext
+      ) => {
+        requireAdmin(context);
+        const { AuditService } = await import('../services/auditService');
+        
+        return await AuditService.getAuditStats(timeframe || 'week');
+      },
+
+      userAuditHistory: async (
+        _: unknown,
+        { userId, limit }: { userId: string; limit?: number },
+        context: GraphQLContext
+      ) => {
+        // Users can view their own history, or admins can view any history
+        if (context.user?.id !== userId && context.user?.role !== 'ADMIN') {
+          throw new Error('Unauthorized to view this audit history');
+        }
+        
+        const { AuditService } = await import('../services/auditService');
+        
+        return await AuditService.getAuditLogs({
+          userId,
+          limit: limit || 50,
+        });
+      },
+
+      // ============================================================================
       // WORKFLOW QUERIES
       // ============================================================================
 
@@ -1367,12 +1595,12 @@ export const schema = createSchema({
     },
 
     Mutation: {
-      register: async (_: unknown, { input }: any) => {
-        return registerUser(input);
+      register: async (_: unknown, { input }: any, context: GraphQLContext) => {
+        return registerUser(input, context.request);
       },
 
-      login: async (_: unknown, { input }: any) => {
-        return loginUser(input);
+      login: async (_: unknown, { input }: any, context: GraphQLContext) => {
+        return loginUser(input, context.request);
       },
 
       upsertArticle: async (_: unknown, { id, input }: any, context: GraphQLContext) => {

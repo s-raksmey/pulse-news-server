@@ -20,7 +20,6 @@ export interface GraphQLContext {
  * Extracts JWT token from Authorization header and adds user to context
  */
 export async function createAuthContext(request: Request): Promise<GraphQLContext> {
-  console.log('🔍 Backend Debug - createAuthContext called');
   const context: GraphQLContext = {
     request,
   };
@@ -28,27 +27,19 @@ export async function createAuthContext(request: Request): Promise<GraphQLContex
   try {
     // Extract token from Authorization header
     const authHeader = request.headers.get('authorization');
-    console.log('🔍 Backend Debug - Authorization header present:', !!authHeader);
-    
     const token = extractTokenFromHeader(authHeader ?? undefined);
 
     if (!token) {
       // No token provided - return context without user (public access)
-      console.log('🔍 Backend Debug - No token extracted, returning public context');
       return context;
     }
-
-    console.log('🔍 Backend Debug - Token extracted successfully');
 
     // Verify JWT token
     const payload = verifyToken(token);
     if (!payload) {
       // Invalid token - return context without user
-      console.warn('🔍 Backend Debug - Invalid JWT token provided');
       return context;
     }
-
-    console.log('🔍 Backend Debug - JWT verified, userId:', payload.userId);
 
     // Verify user still exists and is active in database
     const user = await prisma.user.findUnique({
@@ -62,17 +53,8 @@ export async function createAuthContext(request: Request): Promise<GraphQLContex
       },
     });
 
-    console.log('🔍 Backend Debug - User lookup result:', {
-      found: !!user,
-      id: user?.id,
-      email: user?.email,
-      role: user?.role,
-      isActive: user?.isActive
-    });
-
     if (!user || !user.isActive) {
       // User not found or inactive - return context without user
-      console.warn(`🔍 Backend Debug - User ${payload.userId} not found or inactive`);
       return context;
     }
 
@@ -84,11 +66,12 @@ export async function createAuthContext(request: Request): Promise<GraphQLContex
       role: user.role,
       isActive: user.isActive,
     };
-    console.log('🔍 Backend Debug - User added to context with role:', context.user.role, 'from database');
     
   } catch (error) {
     // Log error but don't throw - allow request to continue without auth
-    console.error('🔍 Backend Debug - Error in auth middleware:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error in auth middleware:', error);
+    }
   }
 
   return context;
@@ -116,12 +99,9 @@ export class AuthorizationError extends Error {
  * Throws error if user is not authenticated
  */
 export function requireAuth(context: GraphQLContext): asserts context is GraphQLContext & { user: NonNullable<GraphQLContext['user']> } {
-  console.log('🔍 Backend Debug - requireAuth called, user present:', !!context.user);
   if (!context.user) {
-    console.log('🔍 Backend Debug - Authentication failed - no user in context');
     throw new AuthenticationError('Authentication required');
   }
-  console.log('🔍 Backend Debug - Authentication successful for user:', context.user.email, 'role:', context.user.role);
 }
 
 /**
@@ -132,13 +112,10 @@ export function requireRole(context: GraphQLContext, requiredRole: string | stri
   requireAuth(context);
   
   const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
-  console.log('🔍 Backend Debug - requireRole called, user role:', context.user.role, 'required roles:', roles);
   
   if (!roles.includes(context.user.role)) {
-    console.log('🔍 Backend Debug - Authorization failed - user role:', context.user.role, 'required:', roles.join(' or '), 'userId:', context.user.id, 'userEmail:', context.user.email);
     throw new AuthorizationError(`Required role: ${roles.join(' or ')}`);
   }
-  console.log('🔍 Backend Debug - Authorization successful for user:', context.user.email);
 }
 
 /**

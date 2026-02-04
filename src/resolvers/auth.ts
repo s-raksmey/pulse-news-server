@@ -1,8 +1,9 @@
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { generateToken, AuthUser } from '../utils/jwt';
 import { UserRole } from '@prisma/client';
+import { AuditService, AuditEventType } from '../services/auditService';
 
 // Input validation schemas
 const RegisterInput = z.object({
@@ -40,7 +41,7 @@ export async function registerUser(args: {
   password: string;
   name: string;
   role?: UserRole;
-}): Promise<AuthResponse> {
+}, request?: Request): Promise<AuthResponse> {
   try {
     // Validate input
     const validatedInput = RegisterInput.parse(args);
@@ -83,6 +84,19 @@ export async function registerUser(args: {
 
     const token = generateToken(authUser);
 
+    // Log successful registration with request context for IP extraction
+    await AuditService.logEvent({
+      eventType: AuditEventType.USER_REGISTRATION,
+      userId: user.id,
+      success: true,
+      details: {
+        email: user.email,
+        role: user.role,
+      },
+      ipAddress: AuditService.getClientIp(request),
+      userAgent: request?.headers.get('user-agent') || undefined,
+    });
+
     return {
       success: true,
       message: 'User registered successfully',
@@ -119,7 +133,7 @@ export async function registerUser(args: {
 export async function loginUser(args: {
   email: string;
   password: string;
-}): Promise<AuthResponse> {
+}, request?: Request): Promise<AuthResponse> {
   try {
     // Validate input
     const validatedInput = LoginInput.parse(args);
@@ -148,6 +162,16 @@ export async function loginUser(args: {
     const isPasswordValid = await bcrypt.compare(validatedInput.password, user.password);
 
     if (!isPasswordValid) {
+      // Log failed login attempt with request context for IP extraction
+      await AuditService.logEvent({
+        eventType: AuditEventType.USER_LOGIN,
+        userId: user.id,
+        success: false,
+        errorMessage: 'Invalid password',
+        ipAddress: AuditService.getClientIp(request),
+        userAgent: request?.headers.get('user-agent') || undefined,
+      });
+
       return {
         success: false,
         message: 'Invalid email or password',
@@ -164,6 +188,18 @@ export async function loginUser(args: {
     };
 
     const token = generateToken(authUser);
+
+    // Log successful login with request context for IP extraction
+    await AuditService.logEvent({
+      eventType: AuditEventType.USER_LOGIN,
+      userId: user.id,
+      success: true,
+      details: {
+        email: user.email,
+      },
+      ipAddress: AuditService.getClientIp(request),
+      userAgent: request?.headers.get('user-agent') || undefined,
+    });
 
     return {
       success: true,
