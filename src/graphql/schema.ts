@@ -871,11 +871,11 @@ export const schema = createSchema({
           
           // Import permission services with static import for better reliability
           const { PermissionService, Permission } = await import('../services/permissionService');
-          console.log('🔍 Permission services imported successfully');
+  
           
           const userRole = context.user!.role;
           const userId = context.user!.id;
-          console.log('🔍 User details - ID:', userId, 'Role:', userRole, 'Email:', context.user!.email);
+
           
           // Build where clause for filtering
           const where: any = {};
@@ -898,10 +898,10 @@ export const schema = createSchema({
           // Handle explicit authorId parameter (for "My Articles" page)
           if (args.authorId) {
             where.authorId = args.authorId;
-            console.log('🔍 Explicit authorId filter applied:', args.authorId);
+
           } else {
             // Apply role-based filtering for general articles access
-            console.log('🔍 Checking permissions for role:', userRole);
+
             
             // Check if user has permission to see all articles
             const hasUpdateAnyPermission = PermissionService.hasPermission(userRole as any, Permission.UPDATE_ANY_ARTICLE);
