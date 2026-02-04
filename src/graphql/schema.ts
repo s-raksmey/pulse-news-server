@@ -1444,9 +1444,10 @@ export const schema = createSchema({
           }
           
           // Check if user can modify article features (featured, breaking, editor's pick)
-          const hasFeatureChanges = data.isFeatured !== undefined || 
-                                   data.isEditorsPick !== undefined || 
-                                   data.isBreaking !== undefined;
+          // Only check if user is trying to ENABLE features, not just sending the fields
+          const hasFeatureChanges = data.isFeatured === true || 
+                                   data.isEditorsPick === true || 
+                                   data.isBreaking === true;
           
           if (hasFeatureChanges && !PermissionService.canSetArticleFeatures(userRole)) {
             throw new Error('Permission denied: You cannot set article features (featured, breaking news, editor\'s pick)');

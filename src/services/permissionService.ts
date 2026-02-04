@@ -116,9 +116,7 @@ export class PermissionService {
     const rolePermissions = ROLE_PERMISSIONS[userRole];
     const hasPermission = rolePermissions?.includes(permission) || false;
     
-    // Debug logging for permission checks (temporarily enabled for troubleshooting)
-    console.log(`🔍 Permission Check: Role "${userRole}" ${hasPermission ? 'HAS' : 'DOES NOT HAVE'} permission "${permission}"`);
-    console.log(`🔍 Available permissions for ${userRole}:`, rolePermissions?.map(p => p.toString()) || []);
+
     
     return hasPermission;
   }
@@ -230,17 +228,7 @@ export class PermissionService {
         const reviewPermission = this.hasPermission(userRole, Permission.REVIEW_ARTICLES);
         const reviewResult = authorCheck || reviewPermission;
         
-        // Temporary debug logging to understand the issue
-        console.log('🔍 REVIEW workflow debug:', {
-          userRole,
-          userRoleType: typeof userRole,
-          isOwner,
-          authorCheck,
-          reviewPermission,
-          reviewResult,
-          enumComparison: userRole === UserRole.AUTHOR,
-          stringComparison: String(userRole) === 'AUTHOR'
-        });
+
         
         return reviewResult;
       
