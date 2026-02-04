@@ -1454,22 +1454,9 @@ export const schema = createSchema({
           
           // Check if user can change article status
           if (data.status && data.status !== existingArticle.status) {
-            console.log('🔍 GraphQL upsertArticle status change check:', {
-              userId: context.user!.id,
-              userRole,
-              userRoleType: typeof userRole,
-              existingStatus: existingArticle.status,
-              newStatus: data.status,
-              isOwner,
-              authorId: existingArticle.authorId
-            });
-            
             if (!PermissionService.canPerformWorkflowAction(userRole, existingArticle.status, data.status, isOwner)) {
-              console.log('❌ Permission denied for status change');
               throw new Error(`Permission denied: Cannot change article status from ${existingArticle.status} to ${data.status}`);
             }
-            
-            console.log('✅ Permission granted for status change');
           }
         } else {
           // Creating new article
