@@ -218,7 +218,7 @@ export class PermissionService {
     targetStatus: string,
     isOwner: boolean
   ): boolean {
-    console.log('🔍 canPerformWorkflowAction called:', {
+    console.log('[DEBUG] canPerformWorkflowAction called:', {
       userRole,
       userRoleType: typeof userRole,
       userRoleString: String(userRole),
@@ -235,37 +235,40 @@ export class PermissionService {
       case 'DRAFT':
         // Anyone can save as draft if they own it, or editors/admins can modify any
         const draftResult = isOwner || this.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE);
-        console.log('🔍 DRAFT check result:', draftResult);
+        console.log('[DEBUG] DRAFT check result:', draftResult);
         return draftResult;
       
       case 'REVIEW':
         // Authors can submit for review, editors/admins can move to review
-        const authorCheck = isOwner && userRole === UserRole.AUTHOR;
+        const authorCheck = isOwner && (userRole === UserRole.AUTHOR || String(userRole) === 'AUTHOR');
         const reviewPermission = this.hasPermission(userRole, Permission.REVIEW_ARTICLES);
         const reviewResult = authorCheck || reviewPermission;
-        console.log('🔍 REVIEW check:', {
+        console.log('[DEBUG] REVIEW check:', {
           authorCheck,
           reviewPermission,
           reviewResult,
           isOwner,
-          userRoleMatch: userRole === UserRole.AUTHOR
+          userRoleMatch: userRole === UserRole.AUTHOR,
+          userRoleString: String(userRole),
+          UserRoleAuthorString: String(UserRole.AUTHOR),
+          stringComparison: String(userRole) === 'AUTHOR'
         });
         return reviewResult;
       
       case 'PUBLISHED':
         // Only editors and admins can publish
         const publishResult = this.hasPermission(userRole, Permission.PUBLISH_ARTICLE);
-        console.log('🔍 PUBLISHED check result:', publishResult);
+        console.log('[DEBUG] PUBLISHED check result:', publishResult);
         return publishResult;
       
       case 'ARCHIVED':
         // Only editors and admins can archive
         const archiveResult = this.hasPermission(userRole, Permission.UNPUBLISH_ARTICLE);
-        console.log('🔍 ARCHIVED check result:', archiveResult);
+        console.log('[DEBUG] ARCHIVED check result:', archiveResult);
         return archiveResult;
       
       default:
-        console.log('🔍 Unknown target status:', targetStatus);
+        console.log('[DEBUG] Unknown target status:', targetStatus);
         return false;
     }
   }

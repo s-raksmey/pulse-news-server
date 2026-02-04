@@ -1454,7 +1454,7 @@ export const schema = createSchema({
           
           // Check if user can change article status
           if (data.status && data.status !== existingArticle.status) {
-            console.log('🔍 GraphQL upsertArticle status change check:', {
+            console.log('[DEBUG] GraphQL upsertArticle status change check:', {
               userId: context.user!.id,
               userRole,
               userRoleType: typeof userRole,
