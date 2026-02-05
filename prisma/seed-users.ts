@@ -1,5 +1,5 @@
-import { PrismaClient, UserRole, ArticleStatus } from "@prisma/client";
-import bcrypt from "bcrypt";
+import { PrismaClient, UserRole, ArticleStatus } from '@prisma/client';
+import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -8,21 +8,20 @@ const prisma = new PrismaClient();
  * and test articles to verify the role-based access control
  */
 async function main() {
-
   // Hash password for all test users
-  const hashedPassword = await bcrypt.hash("password123", 10);
+  const hashedPassword = await bcrypt.hash('password123', 10);
 
   // Create Admin user
   const admin = await prisma.user.upsert({
-    where: { email: "admin@pulse-news.com" },
+    where: { email: 'admin@pulse-news.com' },
     update: {
       role: UserRole.ADMIN,
       isActive: true,
     },
     create: {
-      email: "admin@pulse-news.com",
+      email: 'admin@pulse-news.com',
       password: hashedPassword,
-      name: "Admin User",
+      name: 'Admin User',
       role: UserRole.ADMIN,
       isActive: true,
     },
@@ -30,15 +29,15 @@ async function main() {
 
   // Create Editor user
   const editor = await prisma.user.upsert({
-    where: { email: "editor@pulse-news.com" },
+    where: { email: 'editor@pulse-news.com' },
     update: {
       role: UserRole.EDITOR,
       isActive: true,
     },
     create: {
-      email: "editor@pulse-news.com",
+      email: 'editor@pulse-news.com',
       password: hashedPassword,
-      name: "Editor User",
+      name: 'Editor User',
       role: UserRole.EDITOR,
       isActive: true,
     },
@@ -46,15 +45,15 @@ async function main() {
 
   // Create Author user
   const author = await prisma.user.upsert({
-    where: { email: "author@pulse-news.com" },
+    where: { email: 'author@pulse-news.com' },
     update: {
       role: UserRole.AUTHOR,
       isActive: true,
     },
     create: {
-      email: "author@pulse-news.com",
+      email: 'author@pulse-news.com',
       password: hashedPassword,
-      name: "Author User",
+      name: 'Author User',
       role: UserRole.AUTHOR,
       isActive: true,
     },
@@ -62,11 +61,11 @@ async function main() {
 
   // Get or create a category for test articles
   const techCategory = await prisma.category.upsert({
-    where: { slug: "tech" },
+    where: { slug: 'tech' },
     update: {},
     create: {
-      slug: "tech",
-      name: "Technology",
+      slug: 'tech',
+      name: 'Technology',
     },
   });
 
@@ -74,24 +73,24 @@ async function main() {
   const authorArticles = [
     {
       title: "Author's Draft Article",
-      slug: "author-draft-article",
-      excerpt: "This is a draft article created by an author",
+      slug: 'author-draft-article',
+      excerpt: 'This is a draft article created by an author',
       status: ArticleStatus.DRAFT,
-      topic: "ai",
+      topic: 'ai',
     },
     {
       title: "Author's Article for Review",
-      slug: "author-review-article",
-      excerpt: "This article is ready for editor review",
+      slug: 'author-review-article',
+      excerpt: 'This article is ready for editor review',
       status: ArticleStatus.REVIEW,
-      topic: "startups",
+      topic: 'startups',
     },
     {
       title: "Author's Published Article",
-      slug: "author-published-article",
-      excerpt: "This article was published by an editor",
+      slug: 'author-published-article',
+      excerpt: 'This article was published by an editor',
       status: ArticleStatus.PUBLISHED,
-      topic: "innovation",
+      topic: 'innovation',
       publishedAt: new Date(),
     },
   ];
@@ -118,24 +117,24 @@ async function main() {
         contentJson: {
           time: Date.now(),
           blocks: [
-            { 
-              type: "header", 
-              data: { text: articleData.title, level: 1 } 
+            {
+              type: 'header',
+              data: { text: articleData.title, level: 1 },
             },
             {
-              type: "paragraph",
+              type: 'paragraph',
               data: {
                 text: articleData.excerpt,
               },
             },
             {
-              type: "paragraph",
+              type: 'paragraph',
               data: {
-                text: "This is test content for the article. It demonstrates the role-based access control system.",
+                text: 'This is test content for the article. It demonstrates the role-based access control system.',
               },
             },
           ],
-          version: "2.30.2",
+          version: '2.30.2',
         },
       },
     });
@@ -143,17 +142,17 @@ async function main() {
 
   // Create an article by the editor
   await prisma.article.upsert({
-    where: { slug: "editor-featured-article" },
+    where: { slug: 'editor-featured-article' },
     update: {
       authorId: editor.id,
       authorName: editor.name,
     },
     create: {
       title: "Editor's Featured Article",
-      slug: "editor-featured-article",
-      excerpt: "This is a featured article created by an editor",
+      slug: 'editor-featured-article',
+      excerpt: 'This is a featured article created by an editor',
       status: ArticleStatus.PUBLISHED,
-      topic: "featured",
+      topic: 'featured',
       authorId: editor.id,
       authorName: editor.name,
       categoryId: techCategory.id,
@@ -163,18 +162,18 @@ async function main() {
       contentJson: {
         time: Date.now(),
         blocks: [
-          { 
-            type: "header", 
-            data: { text: "Editor's Featured Article", level: 1 } 
+          {
+            type: 'header',
+            data: { text: "Editor's Featured Article", level: 1 },
           },
           {
-            type: "paragraph",
+            type: 'paragraph',
             data: {
-              text: "This article was created by an editor and marked as featured.",
+              text: 'This article was created by an editor and marked as featured.',
             },
           },
         ],
-        version: "2.30.2",
+        version: '2.30.2',
       },
     },
   });
@@ -182,7 +181,7 @@ async function main() {
   // Verify the data
   const userCount = await prisma.user.count();
   const articleCount = await prisma.article.count();
-  
+
   // Show articles by status for verification
   const draftCount = await prisma.article.count({ where: { status: ArticleStatus.DRAFT } });
   const reviewCount = await prisma.article.count({ where: { status: ArticleStatus.REVIEW } });

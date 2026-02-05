@@ -1,5 +1,5 @@
-import { verifyToken, extractTokenFromHeader, createContextUser } from "../utils/jwt";
-import { prisma } from "../lib/prisma";
+import { verifyToken, extractTokenFromHeader, createContextUser } from '../utils/jwt';
+import { prisma } from '../lib/prisma';
 
 /**
  * GraphQL Context type with optional authenticated user
@@ -66,7 +66,6 @@ export async function createAuthContext(request: Request): Promise<GraphQLContex
       role: user.role,
       isActive: user.isActive,
     };
-    
   } catch (error) {
     // Log error but don't throw - allow request to continue without auth
     if (process.env.NODE_ENV === 'development') {
@@ -98,7 +97,9 @@ export class AuthorizationError extends Error {
  * Require Authentication Guard
  * Throws error if user is not authenticated
  */
-export function requireAuth(context: GraphQLContext): asserts context is GraphQLContext & { user: NonNullable<GraphQLContext['user']> } {
+export function requireAuth(
+  context: GraphQLContext
+): asserts context is GraphQLContext & { user: NonNullable<GraphQLContext['user']> } {
   if (!context.user) {
     throw new AuthenticationError('Authentication required');
   }
@@ -110,9 +111,9 @@ export function requireAuth(context: GraphQLContext): asserts context is GraphQL
  */
 export function requireRole(context: GraphQLContext, requiredRole: string | string[]): void {
   requireAuth(context);
-  
+
   const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
-  
+
   if (!roles.includes(context.user.role)) {
     throw new AuthorizationError(`Required role: ${roles.join(' or ')}`);
   }
@@ -143,21 +144,29 @@ export function requireAuthor(context: GraphQLContext): void {
  * Check if user owns resource or has elevated permissions
  */
 export function requireOwnershipOrRole(
-  context: GraphQLContext, 
-  resourceUserId: string, 
+  context: GraphQLContext,
+  resourceUserId: string,
   allowedRoles: string[] = ['ADMIN', 'EDITOR']
 ): void {
   requireAuth(context);
-  
+
   // Allow if user owns the resource
   if (context.user.id === resourceUserId) {
     return;
   }
-  
+
   // Allow if user has elevated role
   if (allowedRoles.includes(context.user.role)) {
     return;
   }
-  
+
   throw new AuthorizationError('You can only access your own resources');
+}
+
+/**
+ * Require Preview Permission Guard (allows all authenticated users who have preview permission)
+ * This allows ADMIN, EDITOR, and AUTHOR to preview articles
+ */
+export function requirePreview(context: GraphQLContext): void {
+  requireRole(context, ['ADMIN', 'EDITOR', 'AUTHOR']);
 }

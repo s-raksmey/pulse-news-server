@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 
-import { 
-  promoteUserToAdminByEmail, 
-  listAdminUsers, 
-  getUserCountByRole, 
+import {
+  promoteUserToAdminByEmail,
+  listAdminUsers,
+  getUserCountByRole,
   ensureAdminExists,
-  UserRole 
+  UserRole,
 } from '../utils/userRoleUtils.js';
 
 /**
  * Admin Management Script
- * 
+ *
  * This script provides utilities for managing admin users in the system.
- * 
+ *
  * Usage:
  *   npx tsx src/scripts/createAdmin.ts --email admin@example.com
  *   npx tsx src/scripts/createAdmin.ts --ensure-admin
@@ -65,9 +65,9 @@ This script helps you manage admin users in the pulse-news system.
 
 async function promoteUserByEmail(email: string) {
   console.log(`\n🔄 Attempting to promote user to admin: ${email}`);
-  
+
   const success = await promoteUserToAdminByEmail(email);
-  
+
   if (success) {
     console.log(`✅ Successfully promoted ${email} to admin role!`);
     process.exit(0);
@@ -79,9 +79,9 @@ async function promoteUserByEmail(email: string) {
 
 async function ensureAdmin() {
   console.log('\n🔄 Ensuring at least one admin user exists...');
-  
+
   const success = await ensureAdminExists();
-  
+
   if (success) {
     console.log('✅ Admin user verification complete!');
     process.exit(0);
@@ -93,17 +93,17 @@ async function ensureAdmin() {
 
 async function listAdmins() {
   console.log('\n👑 Current Admin Users:');
-  
+
   const admins = await listAdminUsers();
-  
+
   if (admins.length === 0) {
     console.log('⚠️  No admin users found!');
     console.log('💡 Consider running: npx tsx src/scripts/createAdmin.ts --ensure-admin');
     return;
   }
-  
+
   console.log(`\nFound ${admins.length} admin user(s):\n`);
-  
+
   admins.forEach((admin, index) => {
     console.log(`${index + 1}. 👑 ${admin.name} (${admin.email})`);
     console.log(`   ID: ${admin.id}\n`);
@@ -112,9 +112,9 @@ async function listAdmins() {
 
 async function showStats() {
   console.log('\n📊 User Role Statistics:');
-  
+
   const counts = await getUserCountByRole();
-  
+
   console.log(`
 👑 Admins:  ${counts[UserRole.ADMIN]}
 ✏️  Editors: ${counts[UserRole.EDITOR]}
@@ -122,7 +122,7 @@ async function showStats() {
 
 Total Active Users: ${counts[UserRole.ADMIN] + counts[UserRole.EDITOR] + counts[UserRole.AUTHOR]}
   `);
-  
+
   if (counts[UserRole.ADMIN] === 0) {
     console.log('⚠️  WARNING: No admin users found!');
     console.log('💡 Consider running: npx tsx src/scripts/createAdmin.ts --ensure-admin');
@@ -131,35 +131,31 @@ Total Active Users: ${counts[UserRole.ADMIN] + counts[UserRole.EDITOR] + counts[
 
 async function main() {
   const args = process.argv.slice(2);
-  
+
   if (args.length === 0 || args.includes('--help')) {
     showHelp();
     return;
   }
-  
+
   try {
     if (args.includes('--email')) {
       const emailIndex = args.indexOf('--email');
       const email = args[emailIndex + 1];
-      
+
       if (!email) {
         console.error('❌ Error: --email requires an email address');
         console.log('💡 Example: --email admin@example.com');
         process.exit(1);
       }
-      
+
       await promoteUserByEmail(email);
-    }
-    else if (args.includes('--ensure-admin')) {
+    } else if (args.includes('--ensure-admin')) {
       await ensureAdmin();
-    }
-    else if (args.includes('--list-admins')) {
+    } else if (args.includes('--list-admins')) {
       await listAdmins();
-    }
-    else if (args.includes('--stats')) {
+    } else if (args.includes('--stats')) {
       await showStats();
-    }
-    else {
+    } else {
       console.error('❌ Unknown command. Use --help for usage information.');
       process.exit(1);
     }
@@ -170,7 +166,7 @@ async function main() {
 }
 
 // Run the script
-main().catch(error => {
+main().catch((error) => {
   console.error('❌ Unexpected error:', error);
   process.exit(1);
 });

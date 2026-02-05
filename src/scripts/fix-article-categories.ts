@@ -1,5 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-import { MEGA_NAV } from "../data/mega-nav.js";
+import { PrismaClient } from '@prisma/client';
+import { MEGA_NAV } from '../data/mega-nav.js';
 
 const prisma = new PrismaClient();
 
@@ -11,15 +11,11 @@ function inferCategoryFromTopic(topic: string | null): string | null {
 
   // Search through MEGA_NAV to find which category contains this topic
   for (const [categorySlug, config] of Object.entries(MEGA_NAV)) {
-    const allItems = [
-      ...config.explore.items,
-      ...config.shop.items,
-      ...config.more.items,
-    ];
+    const allItems = [...config.explore.items, ...config.shop.items, ...config.more.items];
 
     // Check if any item href contains this topic
-    const hasTopicInHref = allItems.some(item => 
-      item.href.includes(`/${topic}`) || item.href.endsWith(`/${topic}`)
+    const hasTopicInHref = allItems.some(
+      (item) => item.href.includes(`/${topic}`) || item.href.endsWith(`/${topic}`)
     );
 
     if (hasTopicInHref) {
@@ -43,40 +39,45 @@ async function fixArticleCategories(dryRun: boolean = true) {
 
   try {
     // 1. Ensure categories exist
-    console.log("1️⃣ Checking categories in database...");
+    console.log('1️⃣ Checking categories in database...');
     const categories = await prisma.category.findMany({
-      select: { id: true, slug: true, name: true }
+      select: { id: true, slug: true, name: true },
     });
 
     if (categories.length === 0) {
-      console.log("❌ No categories found! Run seed script first:");
-      console.log("   npm run seed");
+      console.log('❌ No categories found! Run seed script first:');
+      console.log('   npm run seed');
       return;
     }
 
-    const categoryMap = new Map(categories.map(c => [c.slug, c.id]));
+    const categoryMap = new Map(categories.map((c) => [c.slug, c.id]));
     console.log(`✅ Found ${categories.length} categories`);
 
     // 2. Find articles with null categories
-    console.log("\n2️⃣ Finding articles with null categories...");
+    console.log('\n2️⃣ Finding articles with null categories...');
     const articlesWithNullCategory = await prisma.article.findMany({
       where: { categoryId: null },
-      select: { id: true, title: true, slug: true, topic: true }
+      select: { id: true, title: true, slug: true, topic: true },
     });
 
     if (articlesWithNullCategory.length === 0) {
-      console.log("✅ All articles already have categories assigned!");
+      console.log('✅ All articles already have categories assigned!');
       return;
     }
 
     console.log(`Found ${articlesWithNullCategory.length} articles with null categories`);
 
     // 3. Process each article
-    const fixes: Array<{ articleId: string; title: string; inferredCategory: string; reason: string }> = [];
+    const fixes: Array<{
+      articleId: string;
+      title: string;
+      inferredCategory: string;
+      reason: string;
+    }> = [];
 
     for (const article of articlesWithNullCategory) {
       let inferredCategorySlug: string | null = null;
-      let reason = "";
+      let reason = '';
 
       // Try to infer from topic first
       if (article.topic) {
@@ -94,7 +95,9 @@ async function fixArticleCategories(dryRun: boolean = true) {
 
       // Verify category exists
       if (!categoryMap.has(inferredCategorySlug)) {
-        console.log(`⚠️ Skipping "${article.title}" - inferred category "${inferredCategorySlug}" not found in database`);
+        console.log(
+          `⚠️ Skipping "${article.title}" - inferred category "${inferredCategorySlug}" not found in database`
+        );
         continue;
       }
 
@@ -102,7 +105,7 @@ async function fixArticleCategories(dryRun: boolean = true) {
         articleId: article.id,
         title: article.title,
         inferredCategory: inferredCategorySlug,
-        reason
+        reason,
       });
     }
 
@@ -114,26 +117,25 @@ async function fixArticleCategories(dryRun: boolean = true) {
 
     // 5. Apply fixes if not dry run
     if (!dryRun && fixes.length > 0) {
-      console.log("\n4️⃣ Applying fixes...");
-      
+      console.log('\n4️⃣ Applying fixes...');
+
       for (const fix of fixes) {
         const categoryId = categoryMap.get(fix.inferredCategory)!;
-        
+
         await prisma.article.update({
           where: { id: fix.articleId },
-          data: { categoryId }
+          data: { categoryId },
         });
-        
+
         console.log(`✅ Fixed "${fix.title}" → ${fix.inferredCategory}`);
       }
-      
+
       console.log(`\n🎉 Successfully fixed ${fixes.length} articles!`);
     } else if (dryRun) {
       console.log(`\n💡 To apply these fixes, run: npm run fix-categories`);
     }
-
   } catch (error) {
-    console.error("❌ Fix failed:", error);
+    console.error('❌ Fix failed:', error);
   } finally {
     await prisma.$disconnect();
   }

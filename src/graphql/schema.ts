@@ -1,14 +1,20 @@
-import { createSchema } from "graphql-yoga";
-import { prisma } from "../lib/prisma";
-import { GraphQLJSONObject } from "graphql-scalars";
-import { z } from "zod";
-import { registerUser, loginUser, getCurrentUser } from "../resolvers/auth";
-import { debugArticles } from "../resolvers/debug";
-import { GraphQLContext, requireAuth, requireEditor, requireAdmin } from "../middleware/auth";
+import { createSchema } from 'graphql-yoga';
+import { prisma } from '../lib/prisma';
+import { GraphQLJSONObject } from 'graphql-scalars';
+import { z } from 'zod';
+import { registerUser, loginUser, getCurrentUser } from '../resolvers/auth';
+import { debugArticles } from '../resolvers/debug';
+import {
+  GraphQLContext,
+  requireAuth,
+  requireEditor,
+  requireAdmin,
+  requirePreview,
+} from '../middleware/auth';
 
-import { searchArticles, getSearchSuggestions, SearchInput } from "../services/searchService";
-import { getRelatedArticles, RelatedArticlesInput } from "../services/relatedArticlesService";
-import { SETTINGS_CONFIG, getSettingConfig } from "../data/settings-config";
+import { searchArticles, getSearchSuggestions, SearchInput } from '../services/searchService';
+import { getRelatedArticles, RelatedArticlesInput } from '../services/relatedArticlesService';
+import { SETTINGS_CONFIG, getSettingConfig } from '../data/settings-config';
 
 /**
  * IMPORTANT:
@@ -30,7 +36,7 @@ const ArticleInput = z.object({
   title: z.string().min(3),
   slug: z.string().min(3),
   excerpt: z.string().optional().nullable(),
-  status: z.enum(["DRAFT", "REVIEW", "PUBLISHED", "ARCHIVED"]).optional(),
+  status: z.enum(['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED']).optional(),
   categorySlug: z.string().optional().nullable(),
   topic: z.string().optional().nullable(),
   contentJson: z.any().optional(),
@@ -66,8 +72,8 @@ function normalizeTagSlug(slug: string) {
   return slug
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "");
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
 }
 
 let breakingColumnAvailable: boolean | null = null;
@@ -95,10 +101,7 @@ async function hasBreakingColumn(): Promise<boolean> {
         breakingColumnAvailable = true;
         return true;
       } catch (error) {
-        console.warn(
-          "Failed to add Article.isBreaking column automatically.",
-          error
-        );
+        console.warn('Failed to add Article.isBreaking column automatically.', error);
         breakingColumnAvailable = false;
         return false;
       }
@@ -106,7 +109,7 @@ async function hasBreakingColumn(): Promise<boolean> {
 
     breakingColumnAvailable = true;
   } catch (error) {
-    console.warn("Failed to check for Article.isBreaking column.", error);
+    console.warn('Failed to check for Article.isBreaking column.', error);
     breakingColumnAvailable = false;
   }
 
@@ -349,32 +352,32 @@ export const schema = createSchema({
     type AuditLog {
       id: ID!
       eventType: String!
-      
+
       # User Information
       userId: String
       userEmail: String
       targetUserId: String
       targetUserEmail: String
-      
+
       # Resource Information
       resourceId: String
       resourceType: String
       resourceName: String
-      
+
       # Request Information
       ipAddress: String
       userAgent: String
-      
+
       # Event Status
       success: Boolean!
       errorMessage: String
-      
+
       # Timing
       createdAt: String!
-      
+
       # Details
       details: JSON
-      
+
       # Computed Fields
       action: String!
       description: String!
@@ -471,7 +474,7 @@ export const schema = createSchema({
       me: AuthResponse!
       debugAuth: DebugAuthResponse!
       debugArticles: DebugAuthResponse!
-      
+
       # Content queries
       categories: [Category!]!
 
@@ -496,29 +499,29 @@ export const schema = createSchema({
       enhancedRelatedArticles(input: RelatedArticlesInput!): RelatedArticlesResult!
       topicBySlug(categorySlug: String!, topicSlug: String!): Topic
       topicsByCategory(categorySlug: String!): [Topic!]!
-      
+
       # Search queries
       searchArticles(input: SearchInput!): SearchResult!
       searchSuggestions(query: String!, limit: Int = 5): [String!]!
-      
+
       # User management queries
       listUsers(input: ListUsersInput!): UserListResult!
       getUserById(id: ID!): User!
       getUserStats: UserStats!
       getBasicStats: BasicStats!
       getUserActivity(userId: ID, limit: Int = 50): [ActivityLog!]!
-      
+
       # Workflow queries
       reviewQueue(filters: ReviewQueueFilters): ReviewQueue!
       workflowStats(timeframe: String = "week"): WorkflowStats!
       getPermissionSummary(role: UserRole!): PermissionSummary!
       getAvailableWorkflowActions(articleId: ID!): [WorkflowAction!]!
-      
+
       # Settings queries
       settings(type: SettingType): [Setting!]!
       setting(key: String!): Setting
       publicSettings: [Setting!]!
-      
+
       # Audit log queries
       auditLogs(filters: AuditLogFilters): AuditLogConnection!
       auditStats(timeframe: AuditTimeframe = week): AuditStats!
@@ -529,7 +532,7 @@ export const schema = createSchema({
       # Authentication mutations
       register(input: RegisterInput!): AuthResponse!
       login(input: LoginInput!): AuthResponse!
-      
+
       # Article mutations
       upsertArticle(id: ID, input: UpsertArticleInput!): Article!
       setArticleStatus(id: ID!, status: ArticleStatus!): Article!
@@ -537,12 +540,12 @@ export const schema = createSchema({
       deleteArticle(id: ID!): Boolean!
       upsertTopic(id: ID, input: UpsertTopicInput!): Topic!
       deleteTopic(id: ID!): Boolean!
-      
+
       # Category mutations
       createCategory(input: CreateCategoryInput!): Category!
       updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
       deleteCategory(id: ID!): Boolean!
-      
+
       # User management mutations
       createUser(input: CreateUserInput!): UserManagementResult!
       updateUserProfile(input: UpdateUserProfileInput!): UserManagementResult!
@@ -554,11 +557,11 @@ export const schema = createSchema({
       resetPassword(input: ResetPasswordInput!): PasswordResetResult!
       bulkUpdateUserRoles(userIds: [ID!]!, role: UserRole!): UserManagementResult!
       bulkUpdateUserStatus(userIds: [ID!]!, isActive: Boolean!): UserManagementResult!
-      
+
       # Workflow mutations
       performWorkflowAction(input: WorkflowActionInput!): WorkflowActionResult!
       performBulkWorkflowAction(input: BulkWorkflowActionInput!): BulkWorkflowActionResult!
-      
+
       # Settings mutations
       updateSetting(input: UpdateSettingInput!): Setting!
       updateSettings(input: [UpdateSettingInput!]!): [Setting!]!
@@ -826,7 +829,7 @@ export const schema = createSchema({
 
     AuditLog: {
       createdAt: (p: any) => toIso(p.timestamp || p.createdAt),
-      
+
       userEmail: async (p: any) => {
         if (!p.userId) return null;
         const user = await db.user.findUnique({
@@ -835,7 +838,7 @@ export const schema = createSchema({
         });
         return user?.email || null;
       },
-      
+
       targetUserEmail: async (p: any) => {
         if (!p.targetUserId) return null;
         const user = await db.user.findUnique({
@@ -844,10 +847,10 @@ export const schema = createSchema({
         });
         return user?.email || null;
       },
-      
+
       resourceName: async (p: any) => {
         if (!p.resourceId) return null;
-        
+
         // Get resource name based on resource type
         try {
           if (p.resourceType === 'Article') {
@@ -876,10 +879,10 @@ export const schema = createSchema({
           // Resource might have been deleted
           return null;
         }
-        
+
         return null;
       },
-      
+
       action: (p: any) => {
         // Format event type as readable action
         const eventType = p.eventType as string;
@@ -888,35 +891,35 @@ export const schema = createSchema({
           .map((word: string) => word.charAt(0) + word.slice(1).toLowerCase())
           .join(' ');
       },
-      
+
       description: (p: any) => {
         const eventType = p.eventType as string;
         const success = p.success ? 'succeeded' : 'failed';
         const resource = p.resourceType ? ` on ${p.resourceType}` : '';
-        
+
         // Create human-readable description
         const descriptions: Record<string, string> = {
-          'USER_LOGIN': `User login ${success}`,
-          'USER_LOGOUT': `User logout ${success}`,
-          'USER_REGISTRATION': `New user registration ${success}`,
-          'USER_CREATED': `User account created ${success}`,
-          'USER_UPDATED': `User profile updated ${success}`,
-          'USER_DELETED': `User account deleted ${success}`,
-          'USER_ROLE_CHANGED': `User role changed ${success}`,
-          'USER_STATUS_CHANGED': `User status changed ${success}`,
-          'ARTICLE_CREATED': `Article created ${success}`,
-          'ARTICLE_UPDATED': `Article updated ${success}`,
-          'ARTICLE_DELETED': `Article deleted ${success}`,
-          'ARTICLE_STATUS_CHANGED': `Article status changed ${success}`,
-          'ARTICLE_PUBLISHED': `Article published ${success}`,
-          'ARTICLE_UNPUBLISHED': `Article unpublished ${success}`,
-          'ARTICLE_FEATURED': `Article marked as featured ${success}`,
-          'ARTICLE_UNFEATURED': `Article removed from featured ${success}`,
-          'ARTICLE_BREAKING_SET': `Breaking news flag set ${success}`,
-          'ARTICLE_BREAKING_UNSET': `Breaking news flag removed ${success}`,
-          'PERMISSION_DENIED': `Access denied to ${resource}`,
+          USER_LOGIN: `User login ${success}`,
+          USER_LOGOUT: `User logout ${success}`,
+          USER_REGISTRATION: `New user registration ${success}`,
+          USER_CREATED: `User account created ${success}`,
+          USER_UPDATED: `User profile updated ${success}`,
+          USER_DELETED: `User account deleted ${success}`,
+          USER_ROLE_CHANGED: `User role changed ${success}`,
+          USER_STATUS_CHANGED: `User status changed ${success}`,
+          ARTICLE_CREATED: `Article created ${success}`,
+          ARTICLE_UPDATED: `Article updated ${success}`,
+          ARTICLE_DELETED: `Article deleted ${success}`,
+          ARTICLE_STATUS_CHANGED: `Article status changed ${success}`,
+          ARTICLE_PUBLISHED: `Article published ${success}`,
+          ARTICLE_UNPUBLISHED: `Article unpublished ${success}`,
+          ARTICLE_FEATURED: `Article marked as featured ${success}`,
+          ARTICLE_UNFEATURED: `Article removed from featured ${success}`,
+          ARTICLE_BREAKING_SET: `Breaking news flag set ${success}`,
+          ARTICLE_BREAKING_UNSET: `Breaking news flag removed ${success}`,
+          PERMISSION_DENIED: `Access denied to ${resource}`,
         };
-        
+
         return descriptions[eventType] || eventType.replace(/_/g, ' ').toLowerCase();
       },
     },
@@ -938,7 +941,7 @@ export const schema = createSchema({
         // Tag -> ArticleTag[] (articles)
         return db.tag.findMany({
           where: { articles: { some: { articleId: parent.id } } },
-          orderBy: { name: "asc" },
+          orderBy: { name: 'asc' },
         });
       },
     },
@@ -962,16 +965,15 @@ export const schema = createSchema({
             message: 'Authentication required',
           };
         }
-        
+
         return getCurrentUser(context.user.id);
       },
 
       debugAuth: async (_: unknown, __: unknown, context: GraphQLContext) => {
-        
         try {
           // Import permission services
           const { PermissionService, Permission } = await import('../services/permissionService');
-          
+
           if (!context.user) {
             return {
               success: false,
@@ -980,14 +982,23 @@ export const schema = createSchema({
                 hasContext: !!context,
                 hasUser: false,
                 timestamp: new Date().toISOString(),
-              }
+              },
             };
           }
 
           const userRole = context.user.role;
-          const hasCreateArticle = PermissionService.hasPermission(userRole as any, Permission.CREATE_ARTICLE);
-          const hasUpdateAny = PermissionService.hasPermission(userRole as any, Permission.UPDATE_ANY_ARTICLE);
-          const hasReviewArticles = PermissionService.hasPermission(userRole as any, Permission.REVIEW_ARTICLES);
+          const hasCreateArticle = PermissionService.hasPermission(
+            userRole as any,
+            Permission.CREATE_ARTICLE
+          );
+          const hasUpdateAny = PermissionService.hasPermission(
+            userRole as any,
+            Permission.UPDATE_ANY_ARTICLE
+          );
+          const hasReviewArticles = PermissionService.hasPermission(
+            userRole as any,
+            Permission.REVIEW_ARTICLES
+          );
 
           return {
             success: true,
@@ -1007,7 +1018,7 @@ export const schema = createSchema({
               },
               rolePermissions: PermissionService.getRolePermissions(userRole as any),
               timestamp: new Date().toISOString(),
-            }
+            },
           };
         } catch (error) {
           return {
@@ -1016,37 +1027,33 @@ export const schema = createSchema({
             debug: {
               error: error instanceof Error ? error.message : 'Unknown error',
               timestamp: new Date().toISOString(),
-            }
+            },
           };
         }
       },
 
       debugArticles,
 
-      categories: async () =>
-        db.category.findMany({ orderBy: { name: "asc" } }),
+      categories: async () => db.category.findMany({ orderBy: { name: 'asc' } }),
 
       articles: async (_: unknown, args: any, context: GraphQLContext) => {
-        
         try {
           // Require authentication for articles management
           requireAuth(context);
-          
+
           // Import permission services with static import for better reliability
           const { PermissionService, Permission } = await import('../services/permissionService');
-  
-          
+
           const userRole = context.user!.role;
           const userId = context.user!.id;
 
-          
           // Build where clause for filtering
           const where: any = {};
 
           if (args.status) {
             where.status = args.status;
           }
-          
+
           if (args.topic) {
             where.topic = args.topic;
           }
@@ -1058,14 +1065,15 @@ export const schema = createSchema({
           // Handle explicit authorId parameter (for "My Articles" page)
           if (args.authorId) {
             where.authorId = args.authorId;
-
           } else {
             // Apply role-based filtering for general articles access
 
-            
             // Check if user has permission to see all articles
-            const hasUpdateAnyPermission = PermissionService.hasPermission(userRole as any, Permission.UPDATE_ANY_ARTICLE);
-            
+            const hasUpdateAnyPermission = PermissionService.hasPermission(
+              userRole as any,
+              Permission.UPDATE_ANY_ARTICLE
+            );
+
             if (!hasUpdateAnyPermission) {
               // Authors can only see their own articles
               where.authorId = userId;
@@ -1077,14 +1085,13 @@ export const schema = createSchema({
 
           const articles = await db.article.findMany({
             where,
-            orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+            orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
             take: args.take ?? 20,
             skip: args.skip ?? 0,
             select,
           });
-          
+
           return articles;
-          
         } catch (error) {
           throw error; // Re-throw to let GraphQL handle the error response
         }
@@ -1096,13 +1103,16 @@ export const schema = createSchema({
         return db.article.findFirst({
           where: {
             slug,
-            status: "PUBLISHED", // Only show published articles
+            status: 'PUBLISHED', // Only show published articles
           },
           select,
         });
       },
 
-      articleById: async (_: unknown, { id }: { id: string }) => {
+      articleById: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
+        // Require preview permission for all authenticated users (admin, editor, author)
+        requirePreview(context);
+
         const select = await getArticleSelect();
 
         return db.article.findUnique({
@@ -1115,11 +1125,11 @@ export const schema = createSchema({
         const select = await getArticleSelect();
 
         return db.article.findMany({
-          where: { isFeatured: true, status: "PUBLISHED" },
+          where: { isFeatured: true, status: 'PUBLISHED' },
           orderBy: [
             // null-safe ordering
-            { pinnedAt: { sort: "desc", nulls: "last" } },
-            { publishedAt: "desc" },
+            { pinnedAt: { sort: 'desc', nulls: 'last' } },
+            { publishedAt: 'desc' },
           ],
           take: limit ?? 6,
           select,
@@ -1130,11 +1140,8 @@ export const schema = createSchema({
         const select = await getArticleSelect();
 
         return db.article.findMany({
-          where: { isEditorsPick: true, status: "PUBLISHED" },
-          orderBy: [
-            { pinnedAt: { sort: "desc", nulls: "last" } },
-            { publishedAt: "desc" },
-          ],
+          where: { isEditorsPick: true, status: 'PUBLISHED' },
+          orderBy: [{ pinnedAt: { sort: 'desc', nulls: 'last' } }, { publishedAt: 'desc' }],
           take: limit ?? 6,
           select,
         });
@@ -1147,11 +1154,8 @@ export const schema = createSchema({
         const select = await getArticleSelect();
 
         return db.article.findMany({
-          where: { isBreaking: true, status: "PUBLISHED" },
-          orderBy: [
-            { pinnedAt: { sort: "desc", nulls: "last" } },
-            { publishedAt: "desc" },
-          ],
+          where: { isBreaking: true, status: 'PUBLISHED' },
+          orderBy: [{ pinnedAt: { sort: 'desc', nulls: 'last' } }, { publishedAt: 'desc' }],
           take: limit ?? 6,
           select,
         });
@@ -1165,10 +1169,10 @@ export const schema = createSchema({
 
         return db.article.findMany({
           where: {
-            status: "PUBLISHED",
+            status: 'PUBLISHED',
             category: { is: { slug: categorySlug } },
           },
-          orderBy: { publishedAt: "desc" },
+          orderBy: { publishedAt: 'desc' },
           take: limit ?? 6,
           select,
         });
@@ -1178,17 +1182,14 @@ export const schema = createSchema({
         const select = await getArticleSelect();
 
         return db.article.findMany({
-          where: { status: "PUBLISHED" },
-          orderBy: { viewCount: "desc" },
+          where: { status: 'PUBLISHED' },
+          orderBy: { viewCount: 'desc' },
           take: limit ?? 10,
           select,
         });
       },
 
-      relatedArticles: async (
-        _: unknown,
-        { slug, limit }: { slug: string; limit?: number }
-      ) => {
+      relatedArticles: async (_: unknown, { slug, limit }: { slug: string; limit?: number }) => {
         // Keep the original simple implementation for backward compatibility
         const select = await getArticleSelect();
         const article = await db.article.findFirst({
@@ -1198,27 +1199,22 @@ export const schema = createSchema({
 
         if (!article) return [];
 
-        const tagIds = (article.tags ?? [])
-          .map((t: any) => t.tagId)
-          .filter(Boolean);
+        const tagIds = (article.tags ?? []).map((t: any) => t.tagId).filter(Boolean);
         if (!tagIds.length) return [];
 
         return db.article.findMany({
           where: {
-            status: "PUBLISHED",
+            status: 'PUBLISHED',
             id: { not: article.id },
             tags: { some: { tagId: { in: tagIds } } },
           },
-          orderBy: { publishedAt: "desc" },
+          orderBy: { publishedAt: 'desc' },
           take: limit ?? 6,
           select,
         });
       },
 
-      enhancedRelatedArticles: async (
-        _: unknown,
-        { input }: { input: any }
-      ) => {
+      enhancedRelatedArticles: async (_: unknown, { input }: { input: any }) => {
         try {
           const result = await getRelatedArticles(input);
           return result;
@@ -1247,10 +1243,7 @@ export const schema = createSchema({
         });
       },
 
-      topicsByCategory: async (
-        _: unknown,
-        { categorySlug }: { categorySlug: string }
-      ) => {
+      topicsByCategory: async (_: unknown, { categorySlug }: { categorySlug: string }) => {
         const category = await db.category.findUnique({
           where: { slug: categorySlug },
           select: { id: true },
@@ -1260,16 +1253,12 @@ export const schema = createSchema({
 
         return db.topic.findMany({
           where: { categoryId: category.id },
-          orderBy: { title: "asc" },
+          orderBy: { title: 'asc' },
         });
       },
 
       // Search resolvers
-      searchArticles: async (
-        _: unknown,
-        { input }: { input: any },
-        context: GraphQLContext
-      ) => {
+      searchArticles: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
         try {
           const result = await searchArticles(input, context.user?.id);
           return result;
@@ -1295,67 +1284,51 @@ export const schema = createSchema({
       // USER MANAGEMENT QUERIES
       // ============================================================================
 
-      listUsers: async (
-        _: unknown,
-        { input }: { input: any },
-        context: GraphQLContext
-      ) => {
+      listUsers: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
         requireAuth(context);
         requireAdmin(context);
         const { listUsers } = await import('../services/userManagementService.js');
-        
+
         return listUsers(input, context.user!.id);
       },
 
-      getUserById: async (
-        _: unknown,
-        { id }: { id: string },
-        context: GraphQLContext
-      ) => {
+      getUserById: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
         requireAuth(context);
         const { getUserById } = await import('../services/userManagementService.js');
-        
+
         return getUserById(id, context.user!.id, context.user!.role === 'ADMIN');
       },
 
-      getUserStats: async (
-        _: unknown,
-        __: unknown,
-        context: GraphQLContext
-      ) => {
+      getUserStats: async (_: unknown, __: unknown, context: GraphQLContext) => {
         requireAuth(context);
         requireAdmin(context);
         const { getUserStats } = await import('../services/userManagementService.js');
-        
+
         return getUserStats();
       },
 
-      getBasicStats: async (
-        _: unknown,
-        __: unknown,
-        context: GraphQLContext
-      ) => {
+      getBasicStats: async (_: unknown, __: unknown, context: GraphQLContext) => {
         requireAuth(context);
         // Note: Only requires authentication, not admin role
-        
+
         try {
           // Get basic counts that are safe for all authenticated users
           const totalUsers = await prisma.user.count({
-            where: { isActive: true }
+            where: { isActive: true },
           });
-          
+
           const totalArticles = await prisma.article.count();
-          
+
           return {
             totalUsers,
-            totalArticles
+            totalArticles,
           };
         } catch (error) {
           console.error('🔍 Backend Debug - Error in getBasicStats:', error);
           // Return zeros if query fails
           return {
             totalUsers: 0,
-            totalArticles: 0
+            totalArticles: 0,
           };
         }
       },
@@ -1368,7 +1341,7 @@ export const schema = createSchema({
         requireAuth(context);
         requireAdmin(context);
         const { getUserActivity } = await import('../services/userManagementService.js');
-        
+
         return getUserActivity(userId, limit);
       },
 
@@ -1376,33 +1349,35 @@ export const schema = createSchema({
       settings: async (_: unknown, { type }: { type?: string }, context: GraphQLContext) => {
         // Public settings can be accessed by anyone, private settings require admin
         const isAdmin = context.user?.role === 'ADMIN';
-        
+
         const where: any = {};
         if (type) where.type = type;
-        
+
         const settings = await db.setting.findMany({
           where,
-          orderBy: { key: 'asc' }
+          orderBy: { key: 'asc' },
         });
-        
+
         // Filter out private settings for non-admin users and handle corrupted JSON values
         const validSettings = settings
-          .filter((setting: { isPublic: any; }) => setting.isPublic || isAdmin)
-          .filter((setting: { value: null | undefined; key: any; }) => {
+          .filter((setting: { isPublic: any }) => setting.isPublic || isAdmin)
+          .filter((setting: { value: null | undefined; key: any }) => {
             // Check if the value is valid JSON
             try {
               if (setting.value === null || setting.value === undefined) {
                 console.warn(`⚠️  Setting ${setting.key} has null/undefined value, skipping`);
                 return false;
               }
-              
+
               // Check for asterisk corruption
               const valueStr = String(setting.value);
               if (valueStr.includes('*') && valueStr.trim() === '*') {
-                console.warn(`⚠️  Setting ${setting.key} has corrupted value: ${valueStr}, skipping`);
+                console.warn(
+                  `⚠️  Setting ${setting.key} has corrupted value: ${valueStr}, skipping`
+                );
                 return false;
               }
-              
+
               // Try to parse as JSON to validate
               JSON.parse(JSON.stringify(setting.value));
               return true;
@@ -1410,35 +1385,35 @@ export const schema = createSchema({
               return false;
             }
           });
-        
+
         return validSettings;
       },
 
       setting: async (_: unknown, { key }: { key: string }, context: GraphQLContext) => {
         const setting = await db.setting.findUnique({
-          where: { key }
+          where: { key },
         });
-        
+
         if (!setting) return null;
-        
+
         // Check if user can access this setting
         const isAdmin = context.user?.role === 'ADMIN';
         if (!setting.isPublic && !isAdmin) {
           throw new Error('Access denied: This setting is private');
         }
-        
+
         // Validate JSON value before returning
         try {
           if (setting.value === null || setting.value === undefined) {
             return null;
           }
-          
+
           // Check for asterisk corruption
           const valueStr = String(setting.value);
           if (valueStr.includes('*') && valueStr.trim() === '*') {
             return null;
           }
-          
+
           // Try to parse as JSON to validate
           JSON.parse(JSON.stringify(setting.value));
           return setting;
@@ -1450,22 +1425,22 @@ export const schema = createSchema({
       publicSettings: async () => {
         const settings = await db.setting.findMany({
           where: { isPublic: true },
-          orderBy: { key: 'asc' }
+          orderBy: { key: 'asc' },
         });
-        
+
         // Filter out corrupted JSON values
-        const validSettings = settings.filter((setting: { value: null | undefined; }) => {
+        const validSettings = settings.filter((setting: { value: null | undefined }) => {
           try {
             if (setting.value === null || setting.value === undefined) {
               return false;
             }
-            
+
             // Check for asterisk corruption
             const valueStr = String(setting.value);
             if (valueStr.includes('*') && valueStr.trim() === '*') {
               return false;
             }
-            
+
             // Try to parse as JSON to validate
             JSON.parse(JSON.stringify(setting.value));
             return true;
@@ -1473,7 +1448,7 @@ export const schema = createSchema({
             return false;
           }
         });
-        
+
         return validSettings;
       },
 
@@ -1481,14 +1456,10 @@ export const schema = createSchema({
       // AUDIT LOG QUERIES
       // ============================================================================
 
-      auditLogs: async (
-        _: unknown,
-        { filters }: { filters?: any },
-        context: GraphQLContext
-      ) => {
+      auditLogs: async (_: unknown, { filters }: { filters?: any }, context: GraphQLContext) => {
         requireAdmin(context);
         const { AuditService } = await import('../services/auditService');
-        
+
         const logs = await AuditService.getAuditLogs({
           userId: filters?.userId,
           eventType: filters?.eventType,
@@ -1501,7 +1472,7 @@ export const schema = createSchema({
         });
 
         const totalCount = logs.length; // You may want to add a separate count query
-        
+
         return {
           logs,
           totalCount,
@@ -1516,7 +1487,7 @@ export const schema = createSchema({
       ) => {
         requireAdmin(context);
         const { AuditService } = await import('../services/auditService');
-        
+
         return await AuditService.getAuditStats(timeframe || 'week');
       },
 
@@ -1529,9 +1500,9 @@ export const schema = createSchema({
         if (context.user?.id !== userId && context.user?.role !== 'ADMIN') {
           throw new Error('Unauthorized to view this audit history');
         }
-        
+
         const { AuditService } = await import('../services/auditService');
-        
+
         return await AuditService.getAuditLogs({
           userId,
           limit: limit || 50,
@@ -1542,11 +1513,7 @@ export const schema = createSchema({
       // WORKFLOW QUERIES
       // ============================================================================
 
-      reviewQueue: async (
-        _: unknown,
-        { filters }: { filters?: any },
-        context: GraphQLContext
-      ) => {
+      reviewQueue: async (_: unknown, { filters }: { filters?: any }, context: GraphQLContext) => {
         const { ArticleWorkflowService } = await import('../services/articleWorkflowService');
         return await ArticleWorkflowService.getReviewQueue(context, filters || {});
       },
@@ -1576,10 +1543,10 @@ export const schema = createSchema({
         context: GraphQLContext
       ) => {
         requireAuth(context);
-        
+
         const article = await db.article.findUnique({
           where: { id: articleId },
-          select: { status: true, authorId: true }
+          select: { status: true, authorId: true },
         });
 
         if (!article) {
@@ -1606,34 +1573,37 @@ export const schema = createSchema({
       upsertArticle: async (_: unknown, { id, input }: any, context: GraphQLContext) => {
         // Require authentication for article creation/editing
         requireAuth(context);
-        
+
         const data = ArticleInput.parse(input);
-        
+
         // Import permission services
         const { PermissionService, Permission } = await import('../services/permissionService');
         const { AuditService, AuditEventType } = await import('../services/auditService');
-        
+
         const userRole = context.user!.role as any;
-        
+
         // Check if this is an update or create operation
         let existingArticle = null;
         if (id) {
           existingArticle = await db.article.findUnique({
             where: { id },
-            select: { id: true, authorId: true, status: true, title: true }
+            select: { id: true, authorId: true, status: true, title: true },
           });
-          
+
           if (!existingArticle) {
             throw new Error('Article not found');
           }
         }
-        
+
         // Permission checks for article operations
         if (existingArticle) {
           // Updating existing article
           const isOwner = existingArticle.authorId === context.user!.id;
-          
-          if (!isOwner && !PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
+
+          if (
+            !isOwner &&
+            !PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)
+          ) {
             await AuditService.logPermissionDenied(
               context.user!.id,
               'UPDATE_ARTICLE',
@@ -1643,21 +1613,31 @@ export const schema = createSchema({
             );
             throw new Error('Permission denied: You can only edit your own articles');
           }
-          
+
           // Check if user can modify article features (featured, breaking, editor's pick)
           // Only check if user is trying to ENABLE features, not just sending the fields
-          const hasFeatureChanges = data.isFeatured === true || 
-                                   data.isEditorsPick === true || 
-                                   data.isBreaking === true;
-          
+          const hasFeatureChanges =
+            data.isFeatured === true || data.isEditorsPick === true || data.isBreaking === true;
+
           if (hasFeatureChanges && !PermissionService.canSetArticleFeatures(userRole)) {
-            throw new Error('Permission denied: You cannot set article features (featured, breaking news, editor\'s pick)');
+            throw new Error(
+              "Permission denied: You cannot set article features (featured, breaking news, editor's pick)"
+            );
           }
-          
+
           // Check if user can change article status
           if (data.status && data.status !== existingArticle.status) {
-            if (!PermissionService.canPerformWorkflowAction(userRole, existingArticle.status, data.status, isOwner)) {
-              throw new Error(`Permission denied: Cannot change article status from ${existingArticle.status} to ${data.status}`);
+            if (
+              !PermissionService.canPerformWorkflowAction(
+                userRole,
+                existingArticle.status,
+                data.status,
+                isOwner
+              )
+            ) {
+              throw new Error(
+                `Permission denied: Cannot change article status from ${existingArticle.status} to ${data.status}`
+              );
             }
           }
         } else {
@@ -1672,23 +1652,27 @@ export const schema = createSchema({
             );
             throw new Error('Permission denied: You cannot create articles');
           }
-          
+
           // Check if user can set article features on creation
           const hasFeatureSettings = data.isFeatured || data.isEditorsPick || data.isBreaking;
           if (hasFeatureSettings && !PermissionService.canSetArticleFeatures(userRole)) {
-            throw new Error('Permission denied: You cannot set article features (featured, breaking news, editor\'s pick)');
+            throw new Error(
+              "Permission denied: You cannot set article features (featured, breaking news, editor's pick)"
+            );
           }
-          
+
           // Authors can only create drafts or submit for review
           if (userRole === 'AUTHOR' && data.status && !['DRAFT', 'REVIEW'].includes(data.status)) {
-            throw new Error('Permission denied: Authors can only create drafts or submit articles for review');
+            throw new Error(
+              'Permission denied: Authors can only create drafts or submit articles for review'
+            );
           }
         }
         const includeBreaking = await hasBreakingColumn();
 
         // Enhanced category assignment with validation and fallback
         let category = null;
-        let categoryAssignmentLog = "";
+        let categoryAssignmentLog = '';
 
         if (data.categorySlug) {
           // Try to find the requested category
@@ -1703,17 +1687,19 @@ export const schema = createSchema({
             // Category not found - return error with available categories
             const availableCategories = await db.category.findMany({
               select: { slug: true, name: true },
-              orderBy: { slug: 'asc' }
+              orderBy: { slug: 'asc' },
             });
 
-            const availableSlugs = availableCategories.map((c: { slug: any; }) => c.slug).join(', ');
-            throw new Error(`Invalid category "${data.categorySlug}". Available categories: ${availableSlugs}`);
+            const availableSlugs = availableCategories.map((c: { slug: any }) => c.slug).join(', ');
+            throw new Error(
+              `Invalid category "${data.categorySlug}". Available categories: ${availableSlugs}`
+            );
           }
         } else {
-          categoryAssignmentLog = "ℹ️ No categorySlug provided";
+          categoryAssignmentLog = 'ℹ️ No categorySlug provided';
         }
 
-        const status = data.status ?? "DRAFT";
+        const status = data.status ?? 'DRAFT';
 
         const payload: any = {
           title: data.title,
@@ -1724,7 +1710,7 @@ export const schema = createSchema({
           contentJson: data.contentJson ?? {
             time: Date.now(),
             blocks: [],
-            version: "2.x",
+            version: '2.x',
           },
 
           isFeatured: data.isFeatured ?? false,
@@ -1774,7 +1760,7 @@ export const schema = createSchema({
             article = await db.article.create({
               data: {
                 ...payload,
-                publishedAt: status === "PUBLISHED" ? new Date() : null,
+                publishedAt: status === 'PUBLISHED' ? new Date() : null,
               },
               select,
             });
@@ -1787,9 +1773,7 @@ export const schema = createSchema({
             where: { articleId: article.id },
           });
 
-          const unique = Array.from(
-            new Set(data.tagSlugs.map(normalizeTagSlug).filter(Boolean))
-          );
+          const unique = Array.from(new Set(data.tagSlugs.map(normalizeTagSlug).filter(Boolean)));
 
           for (const slug of unique) {
             const tag = await db.tag.upsert({
@@ -1805,7 +1789,9 @@ export const schema = createSchema({
         }
 
         // Log the article operation
-        const eventType = existingArticle ? AuditEventType.ARTICLE_UPDATED : AuditEventType.ARTICLE_CREATED;
+        const eventType = existingArticle
+          ? AuditEventType.ARTICLE_UPDATED
+          : AuditEventType.ARTICLE_CREATED;
         await AuditService.logArticleEvent(
           eventType,
           context.user!.id,
@@ -1814,10 +1800,15 @@ export const schema = createSchema({
             title: article.title,
             status: article.status,
             isUpdate: !!existingArticle,
-            changes: existingArticle ? {
-              statusChanged: data.status && data.status !== existingArticle.status,
-              featuresChanged: data.isFeatured !== undefined || data.isEditorsPick !== undefined || data.isBreaking !== undefined
-            } : undefined
+            changes: existingArticle
+              ? {
+                  statusChanged: data.status && data.status !== existingArticle.status,
+                  featuresChanged:
+                    data.isFeatured !== undefined ||
+                    data.isEditorsPick !== undefined ||
+                    data.isBreaking !== undefined,
+                }
+              : undefined,
           },
           context.request
         );
@@ -1828,17 +1819,17 @@ export const schema = createSchema({
       setArticleStatus: async (_: unknown, { id, status }: any, context: GraphQLContext) => {
         // Require authentication
         requireAuth(context);
-        
+
         // Require editor permissions for publishing articles
-        if (status === "PUBLISHED") {
+        if (status === 'PUBLISHED') {
           requireEditor(context);
         }
-        
+
         return db.article.update({
           where: { id },
           data: {
             status,
-            publishedAt: status === "PUBLISHED" ? new Date() : null,
+            publishedAt: status === 'PUBLISHED' ? new Date() : null,
           },
           select: {
             id: true,
@@ -1858,7 +1849,7 @@ export const schema = createSchema({
 
       deleteArticle: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
         requireAuth(context);
-        
+
         const article = await db.article.findUnique({
           where: { id },
           select: { id: true, authorId: true, title: true, status: true },
@@ -1868,10 +1859,10 @@ export const schema = createSchema({
         // Import permission services
         const { PermissionService, Permission } = await import('../services/permissionService');
         const { AuditService, AuditEventType } = await import('../services/auditService');
-        
+
         const userRole = context.user!.role as any;
         const isOwner = article.authorId === context.user!.id;
-        
+
         // Check permissions for article deletion
         if (!isOwner && !PermissionService.hasPermission(userRole, Permission.DELETE_ANY_ARTICLE)) {
           await AuditService.logPermissionDenied(
@@ -1883,7 +1874,7 @@ export const schema = createSchema({
           );
           throw new Error('Permission denied: You can only delete your own articles');
         }
-        
+
         // Authors cannot delete published articles
         if (isOwner && userRole === 'AUTHOR' && article.status === 'PUBLISHED') {
           throw new Error('Permission denied: You cannot delete published articles');
@@ -1906,7 +1897,7 @@ export const schema = createSchema({
           {
             title: article.title,
             status: article.status,
-            wasOwner: isOwner
+            wasOwner: isOwner,
           },
           context.request
         );
@@ -1922,7 +1913,7 @@ export const schema = createSchema({
           select: { id: true },
         });
 
-        if (!category) throw new Error("Category not found");
+        if (!category) throw new Error('Category not found');
 
         const payload = {
           slug: data.slug,
@@ -1964,27 +1955,25 @@ export const schema = createSchema({
       // CATEGORY MUTATIONS
       // ============================================================================
 
-      createCategory: async (
-        _: unknown,
-        { input }: { input: any },
-        context: GraphQLContext
-      ) => {
+      createCategory: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
         requireAuth(context);
         requireEditor(context);
 
-        const data = z.object({
-          name: z.string().min(1, "Name is required"),
-          slug: z.string().min(1, "Slug is required"),
-          description: z.string().optional().nullable(),
-        }).parse(input);
+        const data = z
+          .object({
+            name: z.string().min(1, 'Name is required'),
+            slug: z.string().min(1, 'Slug is required'),
+            description: z.string().optional().nullable(),
+          })
+          .parse(input);
 
         // Check if slug already exists
         const existingCategory = await db.category.findUnique({
-          where: { slug: data.slug }
+          where: { slug: data.slug },
         });
 
         if (existingCategory) {
-          throw new Error("A category with this slug already exists");
+          throw new Error('A category with this slug already exists');
         }
 
         return await db.category.create({
@@ -1992,7 +1981,7 @@ export const schema = createSchema({
             name: data.name,
             slug: data.slug,
             description: data.description,
-          }
+          },
         });
       },
 
@@ -2004,29 +1993,31 @@ export const schema = createSchema({
         requireAuth(context);
         requireEditor(context);
 
-        const data = z.object({
-          name: z.string().min(1).optional(),
-          slug: z.string().min(1).optional(),
-          description: z.string().optional().nullable(),
-        }).parse(input);
+        const data = z
+          .object({
+            name: z.string().min(1).optional(),
+            slug: z.string().min(1).optional(),
+            description: z.string().optional().nullable(),
+          })
+          .parse(input);
 
         // Check if category exists
         const existingCategory = await db.category.findUnique({
-          where: { id }
+          where: { id },
         });
 
         if (!existingCategory) {
-          throw new Error("Category not found");
+          throw new Error('Category not found');
         }
 
         // If slug is being updated, check for conflicts
         if (data.slug && data.slug !== existingCategory.slug) {
           const slugConflict = await db.category.findUnique({
-            where: { slug: data.slug }
+            where: { slug: data.slug },
           });
 
           if (slugConflict) {
-            throw new Error("A category with this slug already exists");
+            throw new Error('A category with this slug already exists');
           }
         }
 
@@ -2036,43 +2027,43 @@ export const schema = createSchema({
             ...(data.name && { name: data.name }),
             ...(data.slug && { slug: data.slug }),
             ...(data.description !== undefined && { description: data.description }),
-          }
+          },
         });
       },
 
-      deleteCategory: async (
-        _: unknown,
-        { id }: { id: string },
-        context: GraphQLContext
-      ) => {
+      deleteCategory: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
         requireAuth(context);
         requireEditor(context);
 
         // Check if category exists
         const existingCategory = await db.category.findUnique({
-          where: { id }
+          where: { id },
         });
 
         if (!existingCategory) {
-          throw new Error("Category not found");
+          throw new Error('Category not found');
         }
 
         // Check if category has articles
         const articlesCount = await db.article.count({
-          where: { categoryId: id }
+          where: { categoryId: id },
         });
 
         if (articlesCount > 0) {
-          throw new Error(`Cannot delete category. It has ${articlesCount} articles associated with it.`);
+          throw new Error(
+            `Cannot delete category. It has ${articlesCount} articles associated with it.`
+          );
         }
 
         // Check if category has topics
         const topicsCount = await db.topic.count({
-          where: { categoryId: id }
+          where: { categoryId: id },
         });
 
         if (topicsCount > 0) {
-          throw new Error(`Cannot delete category. It has ${topicsCount} topics associated with it.`);
+          throw new Error(
+            `Cannot delete category. It has ${topicsCount} topics associated with it.`
+          );
         }
 
         await db.category.delete({ where: { id } });
@@ -2083,92 +2074,58 @@ export const schema = createSchema({
       // USER MANAGEMENT MUTATIONS
       // ============================================================================
 
-      createUser: async (
-        _: unknown,
-        { input }: { input: any },
-        context: GraphQLContext
-      ) => {
+      createUser: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
         requireAuth(context);
         requireAdmin(context);
         const { createUser } = await import('../services/userManagementService.js');
-        
+
         return createUser(input, context.user!.id);
       },
 
-      updateUserProfile: async (
-        _: unknown,
-        { input }: { input: any },
-        context: GraphQLContext
-      ) => {
+      updateUserProfile: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
         requireAuth(context);
         const { updateUserProfile } = await import('../services/userManagementService.js');
-        
-        return updateUserProfile(
-          input,
-          context.user!.id,
-          context.user!.role === 'ADMIN'
-        );
+
+        return updateUserProfile(input, context.user!.id, context.user!.role === 'ADMIN');
       },
 
-      updateUserRole: async (
-        _: unknown,
-        { input }: { input: any },
-        context: GraphQLContext
-      ) => {
+      updateUserRole: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
         requireAuth(context);
         requireAdmin(context);
         const { updateUserRole } = await import('../services/userManagementService.js');
-        
+
         return updateUserRole(input, context.user!.id);
       },
 
-      updateUserStatus: async (
-        _: unknown,
-        { input }: { input: any },
-        context: GraphQLContext
-      ) => {
+      updateUserStatus: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
         requireAuth(context);
         requireAdmin(context);
         const { updateUserStatus } = await import('../services/userManagementService.js');
-        
+
         return updateUserStatus(input, context.user!.id);
       },
 
-      deleteUser: async (
-        _: unknown,
-        { id }: { id: string },
-        context: GraphQLContext
-      ) => {
+      deleteUser: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
         requireAuth(context);
         requireAdmin(context);
         const { deleteUser } = await import('../services/userManagementService.js');
-        
+
         return deleteUser(id, context.user!.id);
       },
 
-      changePassword: async (
-        _: unknown,
-        { input }: { input: any },
-        context: GraphQLContext
-      ) => {
+      changePassword: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
         requireAuth(context);
         const { changePassword } = await import('../services/userManagementService.js');
-        
+
         return changePassword(input);
       },
 
-      requestPasswordReset: async (
-        _: unknown,
-        { input }: { input: any }
-      ) => {
+      requestPasswordReset: async (_: unknown, { input }: { input: any }) => {
         const { requestPasswordReset } = await import('../services/userManagementService.js');
         return requestPasswordReset(input);
       },
 
-      resetPassword: async (
-        _: unknown,
-        { input }: { input: any }
-      ) => {
+      resetPassword: async (_: unknown, { input }: { input: any }) => {
         const { resetPassword } = await import('../services/userManagementService.js');
         return resetPassword(input);
       },
@@ -2181,7 +2138,7 @@ export const schema = createSchema({
         requireAuth(context);
         requireAdmin(context);
         const { bulkUpdateUserRoles } = await import('../services/userManagementService.js');
-        
+
         return bulkUpdateUserRoles(userIds, role, context.user!.id);
       },
 
@@ -2193,7 +2150,7 @@ export const schema = createSchema({
         requireAuth(context);
         requireAdmin(context);
         const { bulkUpdateUserStatus } = await import('../services/userManagementService.js');
-        
+
         return bulkUpdateUserStatus(userIds, isActive, context.user!.id);
       },
 
@@ -2205,23 +2162,23 @@ export const schema = createSchema({
       ) => {
         requireAuth(context);
         requireAdmin(context);
-        
+
         const { key, value } = input;
-        
+
         // Get setting configuration for validation
         const config = getSettingConfig(key);
         if (!config) {
           throw new Error(`Unknown setting key: ${key}`);
         }
-        
+
         // TODO: Add validation based on config.validation
-        
+
         // Upsert the setting
         const setting = await db.setting.upsert({
           where: { key },
-          update: { 
+          update: {
             value,
-            updatedAt: new Date()
+            updatedAt: new Date(),
           },
           create: {
             key,
@@ -2230,10 +2187,10 @@ export const schema = createSchema({
             label: config.label,
             description: config.description,
             isPublic: config.isPublic ?? false,
-            isRequired: config.isRequired ?? false
-          }
+            isRequired: config.isRequired ?? false,
+          },
         });
-        
+
         return setting;
       },
 
@@ -2244,24 +2201,24 @@ export const schema = createSchema({
       ) => {
         requireAuth(context);
         requireAdmin(context);
-        
+
         const results = [];
-        
+
         for (const { key, value } of input) {
           // Get setting configuration for validation
           const config = getSettingConfig(key);
           if (!config) {
             throw new Error(`Unknown setting key: ${key}`);
           }
-          
+
           // TODO: Add validation based on config.validation
-          
+
           // Upsert the setting
           const setting = await db.setting.upsert({
             where: { key },
-            update: { 
+            update: {
               value,
-              updatedAt: new Date()
+              updatedAt: new Date(),
             },
             create: {
               key,
@@ -2270,36 +2227,32 @@ export const schema = createSchema({
               label: config.label,
               description: config.description,
               isPublic: config.isPublic ?? false,
-              isRequired: config.isRequired ?? false
-            }
+              isRequired: config.isRequired ?? false,
+            },
           });
-          
+
           results.push(setting);
         }
-        
+
         return results;
       },
 
-      resetSetting: async (
-        _: unknown,
-        { key }: { key: string },
-        context: GraphQLContext
-      ) => {
+      resetSetting: async (_: unknown, { key }: { key: string }, context: GraphQLContext) => {
         requireAuth(context);
         requireAdmin(context);
-        
+
         // Get setting configuration
         const config = getSettingConfig(key);
         if (!config) {
           throw new Error(`Unknown setting key: ${key}`);
         }
-        
+
         // Reset to default value
         const setting = await db.setting.upsert({
           where: { key },
-          update: { 
+          update: {
             value: config.defaultValue,
-            updatedAt: new Date()
+            updatedAt: new Date(),
           },
           create: {
             key,
@@ -2308,10 +2261,10 @@ export const schema = createSchema({
             label: config.label,
             description: config.description,
             isPublic: config.isPublic ?? false,
-            isRequired: config.isRequired ?? false
-          }
+            isRequired: config.isRequired ?? false,
+          },
         });
-        
+
         return setting;
       },
 

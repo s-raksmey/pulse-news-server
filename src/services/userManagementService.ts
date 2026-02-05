@@ -84,7 +84,7 @@ export const UpdateUserProfileInput = z.object({
 export const UpdateUserRoleInput = z.object({
   userId: z.string().min(1, 'User ID is required'),
   role: z.enum(['ADMIN', 'EDITOR', 'AUTHOR'], {
-    errorMap: () => ({ message: 'Role must be ADMIN, EDITOR, or AUTHOR' })
+    errorMap: () => ({ message: 'Role must be ADMIN, EDITOR, or AUTHOR' }),
   }),
 });
 
@@ -147,7 +147,7 @@ async function logActivity(
     // Note: This would require an ActivityLog table in the database
     // For now, we'll just log to console in development
     console.log(`Activity Log: ${activityType} for user ${userId} by ${performedBy}`, details);
-    
+
     // TODO: Implement actual database logging when ActivityLog table is created
     // await prisma.activityLog.create({
     //   data: {
@@ -232,11 +232,11 @@ export async function createUser(
     };
   } catch (error) {
     console.error('Error creating user:', error);
-    
+
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        message: `Validation error: ${error.errors.map(e => e.message).join(', ')}`,
+        message: `Validation error: ${error.errors.map((e) => e.message).join(', ')}`,
       };
     }
 
@@ -844,7 +844,7 @@ export async function getUserStats(): Promise<UserStats> {
     // Get recent registrations (last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     const recentRegistrations = await prisma.user.count({
       where: {
         createdAt: { gte: thirtyDaysAgo },
@@ -871,15 +871,12 @@ export async function getUserStats(): Promise<UserStats> {
 /**
  * Get user activity logs
  */
-export async function getUserActivity(
-  userId?: string,
-  limit: number = 50
-): Promise<ActivityLog[]> {
+export async function getUserActivity(userId?: string, limit: number = 50): Promise<ActivityLog[]> {
   try {
     // TODO: Implement when ActivityLog table is created
     // For now, return empty array
     console.log(`Getting activity logs for user: ${userId || 'all'}, limit: ${limit}`);
-    
+
     return [];
 
     // Future implementation:
@@ -942,11 +939,11 @@ export async function bulkUpdateUserRoles(
 
     // Update users in bulk
     const result = await prisma.user.updateMany({
-      where: { 
-        id: { 
+      where: {
+        id: {
           in: userIds,
-          not: requestingUserId // Extra safety - combine filters properly
-        }
+          not: requestingUserId, // Extra safety - combine filters properly
+        },
       },
       data: { role }, // Now properly typed
     });
@@ -1000,11 +997,11 @@ export async function bulkUpdateUserStatus(
 
     // Update users in bulk
     const result = await prisma.user.updateMany({
-      where: { 
-        id: { 
+      where: {
+        id: {
           in: userIds,
-          not: requestingUserId // Extra safety - combine filters properly
-        }
+          not: requestingUserId, // Extra safety - combine filters properly
+        },
       },
       data: { isActive },
     });
@@ -1044,20 +1041,20 @@ export default {
   updateUserRole,
   updateUserStatus,
   deleteUser,
-  
+
   // Password management
   requestPasswordReset,
   resetPassword,
   changePassword,
-  
+
   // Analytics
   getUserStats,
   getUserActivity,
-  
+
   // Bulk operations
   bulkUpdateUserRoles,
   bulkUpdateUserStatus,
-  
+
   // Utility functions
   logActivity,
   hashPassword,

@@ -6,7 +6,7 @@ import { prisma } from '../lib/prisma.js';
 export enum UserRole {
   ADMIN = 'ADMIN',
   EDITOR = 'EDITOR',
-  AUTHOR = 'AUTHOR'
+  AUTHOR = 'AUTHOR',
 }
 
 /**
@@ -16,9 +16,9 @@ export async function userHasRole(userId: string, role: UserRole): Promise<boole
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true, isActive: true }
+      select: { role: true, isActive: true },
     });
-    
+
     return (user?.isActive ?? false) && user?.role === role;
   } catch (error) {
     console.error('❌ Error checking user role:', error);
@@ -33,9 +33,9 @@ export async function userHasAnyRole(userId: string, roles: UserRole[]): Promise
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true, isActive: true }
+      select: { role: true, isActive: true },
     });
-    
+
     return (user?.isActive ?? false) && (user ? roles.includes(user.role as UserRole) : false);
   } catch (error) {
     console.error('❌ Error checking user roles:', error);
@@ -49,12 +49,12 @@ export async function userHasAnyRole(userId: string, roles: UserRole[]): Promise
 export async function promoteUserToAdmin(userId: string): Promise<boolean> {
   try {
     console.log('ℹ️ Promoting user to admin:', userId);
-    
+
     await prisma.user.update({
       where: { id: userId },
-      data: { role: UserRole.ADMIN }
+      data: { role: UserRole.ADMIN },
     });
-    
+
     console.log('✅ Successfully promoted user to admin:', userId);
     return true;
   } catch (error) {
@@ -69,32 +69,32 @@ export async function promoteUserToAdmin(userId: string): Promise<boolean> {
 export async function promoteUserToAdminByEmail(email: string): Promise<boolean> {
   try {
     console.log('ℹ️ Looking up user by email for admin promotion:', email);
-    
+
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, email: true, role: true, isActive: true }
+      select: { id: true, email: true, role: true, isActive: true },
     });
-    
+
     if (!user) {
       console.log('⚠️ User not found with email:', email);
       return false;
     }
-    
+
     if (!user.isActive) {
       console.log('⚠️ User is not active:', email);
       return false;
     }
-    
+
     if (user.role === UserRole.ADMIN) {
       console.log('ℹ️ User is already an admin:', email);
       return true;
     }
-    
+
     await prisma.user.update({
       where: { id: user.id },
-      data: { role: UserRole.ADMIN }
+      data: { role: UserRole.ADMIN },
     });
-    
+
     console.log('✅ Successfully promoted user to admin by email:', email);
     return true;
   } catch (error) {
@@ -106,21 +106,23 @@ export async function promoteUserToAdminByEmail(email: string): Promise<boolean>
 /**
  * Get all admin users
  */
-export async function listAdminUsers(): Promise<Array<{ id: string; email: string; name: string }>> {
+export async function listAdminUsers(): Promise<
+  Array<{ id: string; email: string; name: string }>
+> {
   try {
     const admins = await prisma.user.findMany({
-      where: { 
+      where: {
         role: UserRole.ADMIN,
-        isActive: true
+        isActive: true,
       },
       select: {
         id: true,
         email: true,
-        name: true
+        name: true,
       },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: 'asc' },
     });
-    
+
     return admins;
   } catch (error) {
     console.error('❌ Error listing admin users:', error);
@@ -136,28 +138,28 @@ export async function getUserCountByRole(): Promise<Record<UserRole, number>> {
     const counts = await prisma.user.groupBy({
       by: ['role'],
       where: { isActive: true },
-      _count: { role: true }
+      _count: { role: true },
     });
-    
+
     const result: Record<UserRole, number> = {
       [UserRole.ADMIN]: 0,
       [UserRole.EDITOR]: 0,
-      [UserRole.AUTHOR]: 0
+      [UserRole.AUTHOR]: 0,
     };
-    
-    counts.forEach(count => {
+
+    counts.forEach((count) => {
       if (count.role in result) {
         result[count.role as UserRole] = count._count.role;
       }
     });
-    
+
     return result;
   } catch (error) {
     console.error('❌ Error getting user count by role:', error);
     return {
       [UserRole.ADMIN]: 0,
       [UserRole.EDITOR]: 0,
-      [UserRole.AUTHOR]: 0
+      [UserRole.AUTHOR]: 0,
     };
   }
 }
@@ -170,37 +172,37 @@ export async function ensureAdminExists(): Promise<boolean> {
   try {
     // Check if any admin users exist
     const adminCount = await prisma.user.count({
-      where: { 
+      where: {
         role: UserRole.ADMIN,
-        isActive: true
-      }
+        isActive: true,
+      },
     });
-    
+
     if (adminCount > 0) {
       console.log('✅ Admin users already exist, count:', adminCount);
       return true;
     }
-    
+
     console.log('⚠️ No admin users found, looking for first active user to promote');
-    
+
     // Find the first active user to promote
     const firstUser = await prisma.user.findFirst({
       where: { isActive: true },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: 'asc' },
     });
-    
+
     if (!firstUser) {
       console.log('❌ No active users found to promote to admin');
       return false;
     }
-    
+
     console.log('ℹ️ Promoting first user to admin:', firstUser.email);
-    
+
     await prisma.user.update({
       where: { id: firstUser.id },
-      data: { role: UserRole.ADMIN }
+      data: { role: UserRole.ADMIN },
     });
-    
+
     console.log('✅ Successfully auto-promoted first user to admin:', firstUser.email);
     return true;
   } catch (error) {

@@ -1,4 +1,4 @@
-import { SettingType } from "@prisma/client";
+import { SettingType } from '@prisma/client';
 
 export interface SettingConfig {
   key: string;
@@ -28,7 +28,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     defaultValue: 'Pulse News',
     isPublic: true,
     isRequired: true,
-    validation: { type: 'string', required: true, min: 1, max: 100 }
+    validation: { type: 'string', required: true, min: 1, max: 100 },
   },
   {
     key: 'site.description',
@@ -37,7 +37,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'A brief description of your news website',
     defaultValue: 'Your trusted source for breaking news and in-depth analysis',
     isPublic: true,
-    validation: { type: 'string', max: 500 }
+    validation: { type: 'string', max: 500 },
   },
   {
     key: 'site.logo_url',
@@ -46,7 +46,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'URL to your site logo image',
     defaultValue: '',
     isPublic: true,
-    validation: { type: 'url' }
+    validation: { type: 'url' },
   },
   {
     key: 'site.favicon_url',
@@ -55,7 +55,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'URL to your site favicon',
     defaultValue: '',
     isPublic: true,
-    validation: { type: 'url' }
+    validation: { type: 'url' },
   },
   {
     key: 'site.contact_email',
@@ -64,7 +64,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Primary contact email for your site',
     defaultValue: '',
     isPublic: true,
-    validation: { type: 'email' }
+    validation: { type: 'email' },
   },
   {
     key: 'site.timezone',
@@ -73,10 +73,17 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Default timezone for the site',
     defaultValue: 'UTC',
     isPublic: true,
-    validation: { 
+    validation: {
       type: 'string',
-      options: ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Tokyo', 'Australia/Sydney']
-    }
+      options: [
+        'UTC',
+        'America/New_York',
+        'America/Los_Angeles',
+        'Europe/London',
+        'Asia/Tokyo',
+        'Australia/Sydney',
+      ],
+    },
   },
 
   // EMAIL SETTINGS
@@ -86,7 +93,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'SMTP Host',
     description: 'SMTP server hostname',
     defaultValue: '',
-    validation: { type: 'string' }
+    validation: { type: 'string' },
   },
   {
     key: 'email.smtp_port',
@@ -94,7 +101,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'SMTP Port',
     description: 'SMTP server port (usually 587 or 465)',
     defaultValue: 587,
-    validation: { type: 'number', min: 1, max: 65535 }
+    validation: { type: 'number', min: 1, max: 65535 },
   },
   {
     key: 'email.smtp_username',
@@ -102,7 +109,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'SMTP Username',
     description: 'Username for SMTP authentication',
     defaultValue: '',
-    validation: { type: 'string' }
+    validation: { type: 'string' },
   },
   {
     key: 'email.smtp_password',
@@ -110,7 +117,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'SMTP Password',
     description: 'Password for SMTP authentication (encrypted)',
     defaultValue: '',
-    validation: { type: 'string' }
+    validation: { type: 'string' },
   },
   {
     key: 'email.from_address',
@@ -118,7 +125,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'From Email Address',
     description: 'Default sender email address',
     defaultValue: '',
-    validation: { type: 'email' }
+    validation: { type: 'email' },
   },
   {
     key: 'email.from_name',
@@ -126,7 +133,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'From Name',
     description: 'Default sender name',
     defaultValue: 'Pulse News',
-    validation: { type: 'string' }
+    validation: { type: 'string' },
   },
   {
     key: 'email.notifications_enabled',
@@ -134,7 +141,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Enable Email Notifications',
     description: 'Whether to send email notifications',
     defaultValue: true,
-    validation: { type: 'boolean' }
+    validation: { type: 'boolean' },
   },
 
   // SEO SETTINGS
@@ -145,16 +152,17 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Default title for SEO meta tags',
     defaultValue: 'Pulse News - Breaking News & Analysis',
     isPublic: true,
-    validation: { type: 'string', max: 60 }
+    validation: { type: 'string', max: 60 },
   },
   {
     key: 'seo.meta_description',
     type: 'SEO',
     label: 'Default Meta Description',
     description: 'Default description for SEO meta tags',
-    defaultValue: 'Stay informed with the latest breaking news, in-depth analysis, and expert commentary from around the world.',
+    defaultValue:
+      'Stay informed with the latest breaking news, in-depth analysis, and expert commentary from around the world.',
     isPublic: true,
-    validation: { type: 'string', max: 160 }
+    validation: { type: 'string', max: 160 },
   },
   {
     key: 'seo.meta_keywords',
@@ -163,7 +171,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Default keywords for SEO (comma-separated)',
     defaultValue: 'news, breaking news, analysis, world news, politics, technology',
     isPublic: true,
-    validation: { type: 'string' }
+    validation: { type: 'string' },
   },
   {
     key: 'seo.google_analytics_id',
@@ -172,7 +180,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Google Analytics tracking ID (GA4)',
     defaultValue: '',
     isPublic: true,
-    validation: { type: 'string', pattern: '^(G-[A-Z0-9]+)?$' }
+    validation: { type: 'string', pattern: '^(G-[A-Z0-9]+)?$' },
   },
   {
     key: 'seo.google_search_console_verification',
@@ -181,7 +189,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Google Search Console verification meta tag content',
     defaultValue: '',
     isPublic: true,
-    validation: { type: 'string' }
+    validation: { type: 'string' },
   },
   {
     key: 'seo.sitemap_enabled',
@@ -190,7 +198,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Whether to generate XML sitemap',
     defaultValue: true,
     isPublic: true,
-    validation: { type: 'boolean' }
+    validation: { type: 'boolean' },
   },
 
   // CONTENT SETTINGS
@@ -200,7 +208,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Require Article Approval',
     description: 'Whether articles need approval before publishing',
     defaultValue: false,
-    validation: { type: 'boolean' }
+    validation: { type: 'boolean' },
   },
   {
     key: 'content.auto_save_interval',
@@ -208,7 +216,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Auto-save Interval (seconds)',
     description: 'How often to auto-save article drafts',
     defaultValue: 30,
-    validation: { type: 'number', min: 10, max: 300 }
+    validation: { type: 'number', min: 10, max: 300 },
   },
   {
     key: 'content.max_article_length',
@@ -216,7 +224,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Maximum Article Length',
     description: 'Maximum number of characters per article (0 = unlimited)',
     defaultValue: 0,
-    validation: { type: 'number', min: 0 }
+    validation: { type: 'number', min: 0 },
   },
   {
     key: 'content.featured_articles_limit',
@@ -224,7 +232,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Featured Articles Limit',
     description: 'Maximum number of featured articles on homepage',
     defaultValue: 5,
-    validation: { type: 'number', min: 1, max: 20 }
+    validation: { type: 'number', min: 1, max: 20 },
   },
   {
     key: 'content.breaking_news_duration',
@@ -232,7 +240,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Breaking News Duration (hours)',
     description: 'How long articles stay marked as breaking news',
     defaultValue: 24,
-    validation: { type: 'number', min: 1, max: 168 }
+    validation: { type: 'number', min: 1, max: 168 },
   },
   {
     key: 'content.comments_enabled',
@@ -240,7 +248,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Enable Comments',
     description: 'Whether to allow comments on articles',
     defaultValue: true,
-    validation: { type: 'boolean' }
+    validation: { type: 'boolean' },
   },
 
   // USER MANAGEMENT SETTINGS
@@ -250,7 +258,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Enable User Registration',
     description: 'Whether new users can register accounts',
     defaultValue: false,
-    validation: { type: 'boolean' }
+    validation: { type: 'boolean' },
   },
   {
     key: 'users.email_verification_required',
@@ -258,7 +266,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Require Email Verification',
     description: 'Whether new users must verify their email',
     defaultValue: true,
-    validation: { type: 'boolean' }
+    validation: { type: 'boolean' },
   },
   {
     key: 'users.default_role',
@@ -266,10 +274,10 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Default User Role',
     description: 'Default role for new users',
     defaultValue: 'AUTHOR',
-    validation: { 
+    validation: {
       type: 'string',
-      options: ['AUTHOR', 'EDITOR', 'ADMIN']
-    }
+      options: ['AUTHOR', 'EDITOR', 'ADMIN'],
+    },
   },
   {
     key: 'users.session_timeout',
@@ -277,7 +285,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Session Timeout (hours)',
     description: 'How long user sessions last',
     defaultValue: 24,
-    validation: { type: 'number', min: 1, max: 720 }
+    validation: { type: 'number', min: 1, max: 720 },
   },
   {
     key: 'users.password_min_length',
@@ -285,7 +293,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Minimum Password Length',
     description: 'Minimum required password length',
     defaultValue: 8,
-    validation: { type: 'number', min: 6, max: 50 }
+    validation: { type: 'number', min: 6, max: 50 },
   },
 
   // API SETTINGS
@@ -295,7 +303,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Rate Limit - Requests per Window',
     description: 'Maximum API requests per time window',
     defaultValue: 100,
-    validation: { type: 'number', min: 10, max: 10000 }
+    validation: { type: 'number', min: 10, max: 10000 },
   },
   {
     key: 'api.rate_limit_window',
@@ -303,7 +311,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Rate Limit - Window (minutes)',
     description: 'Time window for rate limiting',
     defaultValue: 15,
-    validation: { type: 'number', min: 1, max: 60 }
+    validation: { type: 'number', min: 1, max: 60 },
   },
   {
     key: 'api.cors_origins',
@@ -311,7 +319,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'CORS Allowed Origins',
     description: 'Allowed origins for CORS (comma-separated)',
     defaultValue: '*',
-    validation: { type: 'string' }
+    validation: { type: 'string' },
   },
   {
     key: 'api.public_endpoints_enabled',
@@ -319,7 +327,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Enable Public API Endpoints',
     description: 'Whether to allow public access to read-only endpoints',
     defaultValue: true,
-    validation: { type: 'boolean' }
+    validation: { type: 'boolean' },
   },
 
   // THEME SETTINGS
@@ -330,7 +338,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Primary brand color (hex code)',
     defaultValue: '#3B82F6',
     isPublic: true,
-    validation: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' }
+    validation: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
   },
   {
     key: 'theme.secondary_color',
@@ -339,7 +347,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Secondary brand color (hex code)',
     defaultValue: '#64748B',
     isPublic: true,
-    validation: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' }
+    validation: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
   },
   {
     key: 'theme.dark_mode_enabled',
@@ -348,7 +356,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Whether to offer dark mode toggle',
     defaultValue: true,
     isPublic: true,
-    validation: { type: 'boolean' }
+    validation: { type: 'boolean' },
   },
   {
     key: 'theme.custom_css',
@@ -357,7 +365,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Additional CSS styles to apply',
     defaultValue: '',
     isPublic: true,
-    validation: { type: 'string' }
+    validation: { type: 'string' },
   },
 
   // MAINTENANCE SETTINGS
@@ -368,7 +376,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Whether the site is in maintenance mode',
     defaultValue: false,
     isPublic: true,
-    validation: { type: 'boolean' }
+    validation: { type: 'boolean' },
   },
   {
     key: 'maintenance.message',
@@ -377,7 +385,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     description: 'Message to display during maintenance',
     defaultValue: 'We are currently performing scheduled maintenance. Please check back soon.',
     isPublic: true,
-    validation: { type: 'string', max: 500 }
+    validation: { type: 'string', max: 500 },
   },
   {
     key: 'maintenance.backup_enabled',
@@ -385,7 +393,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Enable Automatic Backups',
     description: 'Whether to perform automatic database backups',
     defaultValue: true,
-    validation: { type: 'boolean' }
+    validation: { type: 'boolean' },
   },
   {
     key: 'maintenance.backup_frequency',
@@ -393,7 +401,7 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Backup Frequency (hours)',
     description: 'How often to perform backups',
     defaultValue: 24,
-    validation: { type: 'number', min: 1, max: 168 }
+    validation: { type: 'number', min: 1, max: 168 },
   },
   {
     key: 'maintenance.log_retention_days',
@@ -401,26 +409,26 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     label: 'Log Retention (days)',
     description: 'How long to keep application logs',
     defaultValue: 30,
-    validation: { type: 'number', min: 1, max: 365 }
-  }
+    validation: { type: 'number', min: 1, max: 365 },
+  },
 ];
 
 // Helper function to get settings by type
 export function getSettingsByType(type: SettingType): SettingConfig[] {
-  return SETTINGS_CONFIG.filter(setting => setting.type === type);
+  return SETTINGS_CONFIG.filter((setting) => setting.type === type);
 }
 
 // Helper function to get setting by key
 export function getSettingConfig(key: string): SettingConfig | undefined {
-  return SETTINGS_CONFIG.find(setting => setting.key === key);
+  return SETTINGS_CONFIG.find((setting) => setting.key === key);
 }
 
 // Helper function to get all public settings
 export function getPublicSettings(): SettingConfig[] {
-  return SETTINGS_CONFIG.filter(setting => setting.isPublic);
+  return SETTINGS_CONFIG.filter((setting) => setting.isPublic);
 }
 
 // Helper function to get all required settings
 export function getRequiredSettings(): SettingConfig[] {
-  return SETTINGS_CONFIG.filter(setting => setting.isRequired);
+  return SETTINGS_CONFIG.filter((setting) => setting.isRequired);
 }

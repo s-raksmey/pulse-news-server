@@ -1,4 +1,13 @@
-import { GraphQLContext, requireAuth, requireRole, requireAdmin, requireEditor, requireAuthor, requireOwnershipOrRole } from "../middleware/auth";
+import {
+  GraphQLContext,
+  requireAuth,
+  requireRole,
+  requireAdmin,
+  requireEditor,
+  requireAuthor,
+  requireOwnershipOrRole,
+  requirePreview,
+} from '../middleware/auth';
 
 /**
  * Decorator function type for GraphQL resolvers
@@ -53,6 +62,17 @@ export function withEditor(resolver: ResolverFunction): ResolverFunction {
 export function withAuthor(resolver: ResolverFunction): ResolverFunction {
   return (parent: any, args: any, context: GraphQLContext, info: any) => {
     requireAuthor(context);
+    return resolver(parent, args, context, info);
+  };
+}
+
+/**
+ * Higher-order function to wrap resolvers with preview authorization
+ * Allows admin, editor, and author roles to preview articles
+ */
+export function withPreview(resolver: ResolverFunction): ResolverFunction {
+  return (parent: any, args: any, context: GraphQLContext, info: any) => {
+    requirePreview(context);
     return resolver(parent, args, context, info);
   };
 }
@@ -117,15 +137,15 @@ export function isAuthor(context: GraphQLContext): boolean {
  * Utility function to check if user owns resource or has elevated permissions without throwing
  */
 export function canAccessResource(
-  context: GraphQLContext, 
-  resourceUserId: string, 
+  context: GraphQLContext,
+  resourceUserId: string,
   allowedRoles: string[] = ['ADMIN', 'EDITOR']
 ): boolean {
   if (!context.user) return false;
-  
+
   // Allow if user owns the resource
   if (context.user.id === resourceUserId) return true;
-  
+
   // Allow if user has elevated role
   return allowedRoles.includes(context.user.role);
 }
@@ -135,15 +155,15 @@ export function canAccessResource(
  */
 export function hasRoleOrHigher(context: GraphQLContext, minimumRole: string): boolean {
   if (!context.user) return false;
-  
+
   const roleHierarchy = {
-    'AUTHOR': 1,
-    'EDITOR': 2,
-    'ADMIN': 3,
+    AUTHOR: 1,
+    EDITOR: 2,
+    ADMIN: 3,
   };
-  
+
   const userRoleLevel = roleHierarchy[context.user.role as keyof typeof roleHierarchy] || 0;
   const requiredRoleLevel = roleHierarchy[minimumRole as keyof typeof roleHierarchy] || 0;
-  
+
   return userRoleLevel >= requiredRoleLevel;
 }

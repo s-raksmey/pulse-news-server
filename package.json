@@ -15,7 +15,11 @@
     "check-categories": "tsx src/scripts/check-article-categories.ts",
     "diagnose-categories": "tsx src/scripts/diagnose-categories.ts",
     "fix-categories": "tsx src/scripts/fix-article-categories.ts --apply",
-    "fix-categories-dry-run": "tsx src/scripts/fix-article-categories.ts"
+    "fix-categories-dry-run": "tsx src/scripts/fix-article-categories.ts",
+    "lint": "eslint src prisma --ext .ts",
+    "lint:fix": "eslint src prisma --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"prisma/**/*.ts\""
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -30,9 +34,14 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@types/bcrypt": "^6.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.0.9",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^9.39.2",
+    "prettier": "^3.8.1",
     "prisma": "^5.21.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.2"

@@ -102,14 +102,16 @@ export class ArticleWorkflowService {
 
       // Determine target status based on action
       const targetStatus = this.getTargetStatus(action, currentStatus);
-      
+
       // Validate transition
       if (!this.isValidTransition(currentStatus, targetStatus)) {
         throw new Error(`Invalid transition from ${currentStatus} to ${targetStatus}`);
       }
 
       // Check permissions
-      if (!PermissionService.canPerformWorkflowAction(userRole, currentStatus, targetStatus, isOwner)) {
+      if (
+        !PermissionService.canPerformWorkflowAction(userRole, currentStatus, targetStatus, isOwner)
+      ) {
         await AuditService.logPermissionDenied(
           context.user.id,
           `${action} on article ${articleId}`,
@@ -117,7 +119,9 @@ export class ArticleWorkflowService {
           'Article',
           context.request
         );
-        throw new Error(`Permission denied: Cannot perform ${action} on article in ${currentStatus} status`);
+        throw new Error(
+          `Permission denied: Cannot perform ${action} on article in ${currentStatus} status`
+        );
       }
 
       // Perform the workflow action
@@ -318,14 +322,16 @@ export class ArticleWorkflowService {
   static async getWorkflowHistory(
     articleId: string,
     context: GraphQLContext
-  ): Promise<Array<{
-    action: string;
-    fromStatus: string;
-    toStatus: string;
-    performedBy: string;
-    performedAt: Date;
-    reason?: string;
-  }>> {
+  ): Promise<
+    Array<{
+      action: string;
+      fromStatus: string;
+      toStatus: string;
+      performedBy: string;
+      performedAt: Date;
+      reason?: string;
+    }>
+  > {
     if (!context.user) {
       throw new Error('Authentication required');
     }
@@ -388,7 +394,10 @@ export class ArticleWorkflowService {
   /**
    * Private helper methods
    */
-  private static getTargetStatus(action: WorkflowAction, currentStatus: ArticleStatus): ArticleStatus {
+  private static getTargetStatus(
+    action: WorkflowAction,
+    currentStatus: ArticleStatus
+  ): ArticleStatus {
     switch (action) {
       case WorkflowAction.SAVE_DRAFT:
         return ArticleStatus.DRAFT;

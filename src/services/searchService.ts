@@ -59,23 +59,26 @@ export interface SearchAnalytics {
 /**
  * Main search function with full-text search and filtering
  */
-export async function searchArticles(input: SearchInputType, userId?: string): Promise<SearchResult> {
+export async function searchArticles(
+  input: SearchInputType,
+  userId?: string
+): Promise<SearchResult> {
   const startTime = Date.now();
-  
+
   // Validate input
   const validatedInput = SearchInput.parse(input);
-  const { 
-    query, 
-    categorySlug, 
-    tags, 
-    authorName, 
-    status, 
-    dateFrom, 
-    dateTo, 
-    sortBy, 
-    sortOrder, 
-    take, 
-    skip 
+  const {
+    query,
+    categorySlug,
+    tags,
+    authorName,
+    status,
+    dateFrom,
+    dateTo,
+    sortBy,
+    sortOrder,
+    take,
+    skip,
   } = validatedInput;
 
   // Build where clause for filtering
@@ -91,7 +94,7 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
   // Category filter
   if (categorySlug) {
     whereClause.category = {
-      slug: categorySlug
+      slug: categorySlug,
     };
   }
 
@@ -99,7 +102,7 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
   if (authorName) {
     whereClause.authorName = {
       contains: authorName,
-      mode: 'insensitive'
+      mode: 'insensitive',
     };
   }
 
@@ -120,10 +123,10 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
       some: {
         tag: {
           slug: {
-            in: tags
-          }
-        }
-      }
+            in: tags,
+          },
+        },
+      },
     };
   }
 
@@ -146,7 +149,7 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
         { isFeatured: 'desc' },
         { isEditorsPick: 'desc' },
         { viewCount: 'desc' },
-        { publishedAt: 'desc' }
+        { publishedAt: 'desc' },
       ];
       break;
   }
@@ -155,14 +158,14 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
     // For full-text search, we'll use PostgreSQL's built-in text search
     // This is a simplified version - in production, you might want to use
     // more advanced search solutions like Elasticsearch
-    
+
     let articles: any[] = [];
     let totalCount = 0;
 
     if (query.trim()) {
       // For now, we'll use a simpler approach with LIKE queries
       // In production, you'd want to implement proper full-text search with PostgreSQL or Elasticsearch
-      
+
       // Build search where clause
       const searchWhere = {
         ...whereClause,
@@ -170,22 +173,22 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
           {
             title: {
               contains: query,
-              mode: 'insensitive' as const
-            }
+              mode: 'insensitive' as const,
+            },
           },
           {
             excerpt: {
               contains: query,
-              mode: 'insensitive' as const
-            }
+              mode: 'insensitive' as const,
+            },
           },
           {
             authorName: {
               contains: query,
-              mode: 'insensitive' as const
-            }
-          }
-        ]
+              mode: 'insensitive' as const,
+            },
+          },
+        ],
       };
 
       // Get search results with proper ordering
@@ -196,7 +199,7 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
           { isFeatured: 'desc' },
           { isEditorsPick: 'desc' },
           { viewCount: 'desc' },
-          { publishedAt: 'desc' }
+          { publishedAt: 'desc' },
         ];
       }
 
@@ -227,11 +230,11 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
             createdAt: true,
             updatedAt: true,
             categoryId: true,
-          }
+          },
         }),
         prisma.article.count({
-          where: searchWhere
-        })
+          where: searchWhere,
+        }),
       ]);
 
       articles = searchResults;
@@ -265,11 +268,11 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
             createdAt: true,
             updatedAt: true,
             categoryId: true,
-          }
+          },
         }),
         prisma.article.count({
-          where: whereClause
-        })
+          where: whereClause,
+        }),
       ]);
 
       articles = articlesResult;
@@ -289,9 +292,9 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
           tags,
           author: authorName,
           status,
-          dateRange: dateFrom || dateTo ? { from: dateFrom, to: dateTo } : undefined
+          dateRange: dateFrom || dateTo ? { from: dateFrom, to: dateTo } : undefined,
         },
-        userId
+        userId,
       });
     }
 
@@ -308,11 +311,10 @@ export async function searchArticles(input: SearchInputType, userId?: string): P
           tags,
           author: authorName,
           status,
-          dateRange: dateFrom || dateTo ? { from: dateFrom, to: dateTo } : undefined
-        }
-      }
+          dateRange: dateFrom || dateTo ? { from: dateFrom, to: dateTo } : undefined,
+        },
+      },
     };
-
   } catch (error) {
     console.error('Search error:', error);
     throw new Error('Search failed. Please try again.');
@@ -348,19 +350,19 @@ export async function getSearchSuggestions(query: string, limit: number = 5): Pr
         status: 'PUBLISHED',
         title: {
           contains: query,
-          mode: 'insensitive'
-        }
+          mode: 'insensitive',
+        },
       },
       select: {
-        title: true
+        title: true,
       },
       take: limit,
       orderBy: {
-        viewCount: 'desc'
-      }
+        viewCount: 'desc',
+      },
     });
 
-    suggestions.push(...titleSuggestions.map(a => a.title));
+    suggestions.push(...titleSuggestions.map((a) => a.title));
 
     // Get suggestions from tags if we need more
     if (suggestions.length < limit) {
@@ -368,24 +370,23 @@ export async function getSearchSuggestions(query: string, limit: number = 5): Pr
         where: {
           name: {
             contains: query,
-            mode: 'insensitive'
-          }
+            mode: 'insensitive',
+          },
         },
         select: {
-          name: true
+          name: true,
         },
         take: limit - suggestions.length,
         orderBy: {
-          name: 'asc'
-        }
+          name: 'asc',
+        },
       });
 
-      suggestions.push(...tagSuggestions.map(t => t.name));
+      suggestions.push(...tagSuggestions.map((t) => t.name));
     }
 
     // Remove duplicates and return
     return Array.from(new Set(suggestions)).slice(0, limit);
-
   } catch (error) {
     console.error('Error getting search suggestions:', error);
     return [];
@@ -395,7 +396,9 @@ export async function getSearchSuggestions(query: string, limit: number = 5): Pr
 /**
  * Log search analytics (simplified version)
  */
-async function logSearchAnalytics(analytics: Omit<SearchAnalytics, 'id' | 'createdAt'>): Promise<void> {
+async function logSearchAnalytics(
+  analytics: Omit<SearchAnalytics, 'id' | 'createdAt'>
+): Promise<void> {
   try {
     // In a full implementation, you'd save this to a SearchAnalytics table
     // For now, just log to console in development
@@ -406,7 +409,7 @@ async function logSearchAnalytics(analytics: Omit<SearchAnalytics, 'id' | 'creat
         searchTime: `${analytics.searchTime}ms`,
         filters: analytics.filters,
         userId: analytics.userId || 'anonymous',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
   } catch (error) {
@@ -432,14 +435,14 @@ export function normalizeSearchQuery(query: string): string {
  */
 export function highlightSearchTerms(text: string, query: string): string {
   if (!query || !text) return text;
-  
-  const terms = query.split(' ').filter(term => term.length > 1);
+
+  const terms = query.split(' ').filter((term) => term.length > 1);
   let highlightedText = text;
-  
-  terms.forEach(term => {
+
+  terms.forEach((term) => {
     const regex = new RegExp(`(${term})`, 'gi');
     highlightedText = highlightedText.replace(regex, '<mark>$1</mark>');
   });
-  
+
   return highlightedText;
 }

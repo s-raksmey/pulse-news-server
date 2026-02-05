@@ -50,9 +50,11 @@ const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 /**
  * Main function to get related articles using enhanced algorithms
  */
-export async function getRelatedArticles(input: RelatedArticlesInputType): Promise<RelatedArticlesResult> {
+export async function getRelatedArticles(
+  input: RelatedArticlesInputType
+): Promise<RelatedArticlesResult> {
   const startTime = Date.now();
-  
+
   // Validate input
   const validatedInput = RelatedArticlesInput.parse(input);
   const { slug, limit, algorithm, includeBreaking, excludeIds } = validatedInput;
@@ -60,7 +62,7 @@ export async function getRelatedArticles(input: RelatedArticlesInputType): Promi
   // Check cache first
   const cacheKey = `related:${slug}:${algorithm}:${limit}:${includeBreaking}:${excludeIds?.join(',')}`;
   const cached = getFromCache(cacheKey);
-  
+
   if (cached) {
     return {
       ...cached,
@@ -90,18 +92,18 @@ export async function getRelatedArticles(input: RelatedArticlesInputType): Promi
                 id: true,
                 slug: true,
                 name: true,
-              }
-            }
-          }
+              },
+            },
+          },
         },
         category: {
           select: {
             id: true,
             slug: true,
             name: true,
-          }
-        }
-      }
+          },
+        },
+      },
     });
 
     if (!sourceArticle) {
@@ -124,30 +126,32 @@ export async function getRelatedArticles(input: RelatedArticlesInputType): Promi
         relatedArticles = hybridResult.articles;
         scores = hybridResult.scores;
         break;
-      
+
       case 'tags':
         relatedArticles = await getTagBasedRelatedArticles(sourceArticle, limit, excludeIds);
         break;
-      
+
       case 'category':
         relatedArticles = await getCategoryBasedRelatedArticles(sourceArticle, limit, excludeIds);
         break;
-      
+
       case 'content':
         relatedArticles = await getContentBasedRelatedArticles(sourceArticle, limit, excludeIds);
         break;
-      
+
       case 'popularity':
         relatedArticles = await getPopularityBasedRelatedArticles(sourceArticle, limit, excludeIds);
         break;
-      
+
       default:
-        relatedArticles = await getHybridRelatedArticles(sourceArticle, limit, excludeIds).then(r => r.articles);
+        relatedArticles = await getHybridRelatedArticles(sourceArticle, limit, excludeIds).then(
+          (r) => r.articles
+        );
     }
 
     // Filter out breaking news if not requested
     if (!includeBreaking) {
-      relatedArticles = relatedArticles.filter(article => !article.isBreaking);
+      relatedArticles = relatedArticles.filter((article) => !article.isBreaking);
     }
 
     // Ensure we don't exceed the limit
@@ -166,7 +170,6 @@ export async function getRelatedArticles(input: RelatedArticlesInputType): Promi
     setCache(cacheKey, result);
 
     return result;
-
   } catch (error) {
     console.error('Error getting related articles:', error);
     return {
@@ -183,40 +186,43 @@ export async function getRelatedArticles(input: RelatedArticlesInputType): Promi
  * Hybrid algorithm combining multiple factors for best results
  */
 async function getHybridRelatedArticles(
-  sourceArticle: any, 
-  limit: number, 
+  sourceArticle: any,
+  limit: number,
   excludeIds?: string[]
-): Promise<{ articles: any[], scores: { [articleId: string]: number } }> {
-  
+): Promise<{ articles: any[]; scores: { [articleId: string]: number } }> {
   const tagIds = sourceArticle.tags?.map((t: any) => t.tag.id) || [];
   const categoryId = sourceArticle.categoryId;
-  
+
   // Build exclusion list
   const excludeList = [sourceArticle.id, ...(excludeIds || [])];
 
   // Get potential candidates from multiple sources
   const [tagMatches, categoryMatches, popularArticles] = await Promise.all([
     // Articles with shared tags
-    tagIds.length > 0 ? prisma.article.findMany({
-      where: {
-        status: 'PUBLISHED',
-        id: { notIn: excludeList },
-        tags: { some: { tagId: { in: tagIds } } },
-      },
-      select: getArticleSelectFields(),
-      take: limit * 3, // Get more candidates for scoring
-    }) : [],
+    tagIds.length > 0
+      ? prisma.article.findMany({
+          where: {
+            status: 'PUBLISHED',
+            id: { notIn: excludeList },
+            tags: { some: { tagId: { in: tagIds } } },
+          },
+          select: getArticleSelectFields(),
+          take: limit * 3, // Get more candidates for scoring
+        })
+      : [],
 
     // Articles in same category
-    categoryId ? prisma.article.findMany({
-      where: {
-        status: 'PUBLISHED',
-        id: { notIn: excludeList },
-        categoryId: categoryId,
-      },
-      select: getArticleSelectFields(),
-      take: limit * 2,
-    }) : [],
+    categoryId
+      ? prisma.article.findMany({
+          where: {
+            status: 'PUBLISHED',
+            id: { notIn: excludeList },
+            categoryId: categoryId,
+          },
+          select: getArticleSelectFields(),
+          take: limit * 2,
+        })
+      : [],
 
     // Popular articles as fallback
     prisma.article.findMany({
@@ -227,12 +233,12 @@ async function getHybridRelatedArticles(
       select: getArticleSelectFields(),
       orderBy: { viewCount: 'desc' },
       take: limit,
-    })
+    }),
   ]);
 
   // Combine and deduplicate candidates
   const candidatesMap = new Map<string, any>();
-  [...tagMatches, ...categoryMatches, ...popularArticles].forEach(article => {
+  [...tagMatches, ...categoryMatches, ...popularArticles].forEach((article) => {
     if (!candidatesMap.has(article.id)) {
       candidatesMap.set(article.id, article);
     }
@@ -241,7 +247,7 @@ async function getHybridRelatedArticles(
   const candidates = Array.from(candidatesMap.values());
 
   // Calculate similarity scores for each candidate
-  const scoredArticles: ArticleSimilarity[] = candidates.map(candidate => {
+  const scoredArticles: ArticleSimilarity[] = candidates.map((candidate) => {
     const score = calculateHybridSimilarityScore(sourceArticle, candidate);
     return {
       id: candidate.id,
@@ -252,14 +258,14 @@ async function getHybridRelatedArticles(
 
   // Sort by score and take top results
   scoredArticles.sort((a, b) => b.score - a.score);
-  const topScoredIds = scoredArticles.slice(0, limit).map(s => s.id);
-  
+  const topScoredIds = scoredArticles.slice(0, limit).map((s) => s.id);
+
   // Get the final articles in the correct order
-  const finalArticles = topScoredIds.map(id => candidatesMap.get(id)).filter(Boolean);
+  const finalArticles = topScoredIds.map((id) => candidatesMap.get(id)).filter(Boolean);
 
   // Create scores map
   const scores: { [articleId: string]: number } = {};
-  scoredArticles.slice(0, limit).forEach(scored => {
+  scoredArticles.slice(0, limit).forEach((scored) => {
     scores[scored.id] = scored.score;
   });
 
@@ -269,15 +275,18 @@ async function getHybridRelatedArticles(
 /**
  * Calculate hybrid similarity score between two articles
  */
-function calculateHybridSimilarityScore(sourceArticle: any, candidateArticle: any): { total: number, reasons: string[] } {
+function calculateHybridSimilarityScore(
+  sourceArticle: any,
+  candidateArticle: any
+): { total: number; reasons: string[] } {
   let score = 0;
   const reasons: string[] = [];
 
   // Tag similarity (40% weight)
   const sourceTagIds = new Set(sourceArticle.tags?.map((t: any) => t.tag.id) || []);
   const candidateTagIds = new Set(candidateArticle.tags?.map((t: any) => t.tag.id) || []);
-  const sharedTags = new Set([...sourceTagIds].filter(id => candidateTagIds.has(id)));
-  
+  const sharedTags = new Set([...sourceTagIds].filter((id) => candidateTagIds.has(id)));
+
   if (sharedTags.size > 0) {
     const tagSimilarity = sharedTags.size / Math.max(sourceTagIds.size, candidateTagIds.size);
     const tagScore = tagSimilarity * 40;
@@ -304,7 +313,7 @@ function calculateHybridSimilarityScore(sourceArticle: any, candidateArticle: an
   }
   if (candidateArticle.isEditorsPick) {
     score += 7;
-    reasons.push('Editor\'s pick (+7)');
+    reasons.push("Editor's pick (+7)");
   }
 
   // Popularity factor (10% weight)
@@ -315,9 +324,10 @@ function calculateHybridSimilarityScore(sourceArticle: any, candidateArticle: an
   }
 
   // Recency bonus (small boost for recent articles)
-  const daysSincePublished = (Date.now() - new Date(candidateArticle.publishedAt).getTime()) / (1000 * 60 * 60 * 24);
+  const daysSincePublished =
+    (Date.now() - new Date(candidateArticle.publishedAt).getTime()) / (1000 * 60 * 60 * 24);
   if (daysSincePublished < 7) {
-    const recencyBonus = (7 - daysSincePublished) / 7 * 5;
+    const recencyBonus = ((7 - daysSincePublished) / 7) * 5;
     score += recencyBonus;
     reasons.push(`Recent article (+${recencyBonus.toFixed(1)})`);
   }
@@ -328,9 +338,13 @@ function calculateHybridSimilarityScore(sourceArticle: any, candidateArticle: an
 /**
  * Tag-based related articles (original algorithm, improved)
  */
-async function getTagBasedRelatedArticles(sourceArticle: any, limit: number, excludeIds?: string[]): Promise<any[]> {
+async function getTagBasedRelatedArticles(
+  sourceArticle: any,
+  limit: number,
+  excludeIds?: string[]
+): Promise<any[]> {
   const tagIds = sourceArticle.tags?.map((t: any) => t.tag.id) || [];
-  
+
   if (tagIds.length === 0) return [];
 
   const excludeList = [sourceArticle.id, ...(excludeIds || [])];
@@ -346,7 +360,7 @@ async function getTagBasedRelatedArticles(sourceArticle: any, limit: number, exc
       { isFeatured: 'desc' },
       { isEditorsPick: 'desc' },
       { viewCount: 'desc' },
-      { publishedAt: 'desc' }
+      { publishedAt: 'desc' },
     ],
     take: limit,
   });
@@ -355,7 +369,11 @@ async function getTagBasedRelatedArticles(sourceArticle: any, limit: number, exc
 /**
  * Category-based related articles
  */
-async function getCategoryBasedRelatedArticles(sourceArticle: any, limit: number, excludeIds?: string[]): Promise<any[]> {
+async function getCategoryBasedRelatedArticles(
+  sourceArticle: any,
+  limit: number,
+  excludeIds?: string[]
+): Promise<any[]> {
   if (!sourceArticle.categoryId) return [];
 
   const excludeList = [sourceArticle.id, ...(excludeIds || [])];
@@ -371,7 +389,7 @@ async function getCategoryBasedRelatedArticles(sourceArticle: any, limit: number
       { isFeatured: 'desc' },
       { isEditorsPick: 'desc' },
       { viewCount: 'desc' },
-      { publishedAt: 'desc' }
+      { publishedAt: 'desc' },
     ],
     take: limit,
   });
@@ -380,20 +398,24 @@ async function getCategoryBasedRelatedArticles(sourceArticle: any, limit: number
 /**
  * Content-based related articles (using title/excerpt similarity)
  */
-async function getContentBasedRelatedArticles(sourceArticle: any, limit: number, excludeIds?: string[]): Promise<any[]> {
+async function getContentBasedRelatedArticles(
+  sourceArticle: any,
+  limit: number,
+  excludeIds?: string[]
+): Promise<any[]> {
   const excludeList = [sourceArticle.id, ...(excludeIds || [])];
-  
+
   // Extract keywords from title and excerpt for simple content matching
   const keywords = extractKeywords(sourceArticle.title + ' ' + (sourceArticle.excerpt || ''));
-  
+
   if (keywords.length === 0) return [];
 
   // Use OR conditions to find articles with similar content
-  const whereConditions = keywords.map(keyword => ({
+  const whereConditions = keywords.map((keyword) => ({
     OR: [
       { title: { contains: keyword, mode: 'insensitive' as const } },
-      { excerpt: { contains: keyword, mode: 'insensitive' as const } }
-    ]
+      { excerpt: { contains: keyword, mode: 'insensitive' as const } },
+    ],
   }));
 
   return prisma.article.findMany({
@@ -403,11 +425,7 @@ async function getContentBasedRelatedArticles(sourceArticle: any, limit: number,
       OR: whereConditions,
     },
     select: getArticleSelectFields(),
-    orderBy: [
-      { isFeatured: 'desc' },
-      { viewCount: 'desc' },
-      { publishedAt: 'desc' }
-    ],
+    orderBy: [{ isFeatured: 'desc' }, { viewCount: 'desc' }, { publishedAt: 'desc' }],
     take: limit,
   });
 }
@@ -415,7 +433,11 @@ async function getContentBasedRelatedArticles(sourceArticle: any, limit: number,
 /**
  * Popularity-based related articles
  */
-async function getPopularityBasedRelatedArticles(sourceArticle: any, limit: number, excludeIds?: string[]): Promise<any[]> {
+async function getPopularityBasedRelatedArticles(
+  sourceArticle: any,
+  limit: number,
+  excludeIds?: string[]
+): Promise<any[]> {
   const excludeList = [sourceArticle.id, ...(excludeIds || [])];
 
   return prisma.article.findMany({
@@ -424,11 +446,7 @@ async function getPopularityBasedRelatedArticles(sourceArticle: any, limit: numb
       id: { notIn: excludeList },
     },
     select: getArticleSelectFields(),
-    orderBy: [
-      { viewCount: 'desc' },
-      { isFeatured: 'desc' },
-      { publishedAt: 'desc' }
-    ],
+    orderBy: [{ viewCount: 'desc' }, { isFeatured: 'desc' }, { publishedAt: 'desc' }],
     take: limit,
   });
 }
@@ -438,14 +456,14 @@ async function getPopularityBasedRelatedArticles(sourceArticle: any, limit: numb
  */
 function extractKeywords(text: string): string[] {
   if (!text) return [];
-  
+
   // Simple keyword extraction - in production, use more sophisticated NLP
   const words = text
     .toLowerCase()
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
-    .filter(word => word.length > 3) // Only words longer than 3 characters
-    .filter(word => !isStopWord(word)); // Remove common stop words
+    .filter((word) => word.length > 3) // Only words longer than 3 characters
+    .filter((word) => !isStopWord(word)); // Remove common stop words
 
   // Return unique words, limited to most important ones
   return Array.from(new Set(words)).slice(0, 10);
@@ -456,16 +474,87 @@ function extractKeywords(text: string): string[] {
  */
 function isStopWord(word: string): boolean {
   const stopWords = new Set([
-    'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
-    'this', 'that', 'these', 'those', 'is', 'are', 'was', 'were', 'be', 'been',
-    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
-    'may', 'might', 'must', 'can', 'about', 'into', 'through', 'during', 'before',
-    'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again',
-    'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how',
-    'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such',
-    'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'now'
+    'the',
+    'and',
+    'or',
+    'but',
+    'in',
+    'on',
+    'at',
+    'to',
+    'for',
+    'of',
+    'with',
+    'by',
+    'this',
+    'that',
+    'these',
+    'those',
+    'is',
+    'are',
+    'was',
+    'were',
+    'be',
+    'been',
+    'have',
+    'has',
+    'had',
+    'do',
+    'does',
+    'did',
+    'will',
+    'would',
+    'could',
+    'should',
+    'may',
+    'might',
+    'must',
+    'can',
+    'about',
+    'into',
+    'through',
+    'during',
+    'before',
+    'after',
+    'above',
+    'below',
+    'up',
+    'down',
+    'out',
+    'off',
+    'over',
+    'under',
+    'again',
+    'further',
+    'then',
+    'once',
+    'here',
+    'there',
+    'when',
+    'where',
+    'why',
+    'how',
+    'all',
+    'any',
+    'both',
+    'each',
+    'few',
+    'more',
+    'most',
+    'other',
+    'some',
+    'such',
+    'only',
+    'own',
+    'same',
+    'so',
+    'than',
+    'too',
+    'very',
+    'just',
+    'now',
   ]);
-  
+
   return stopWords.has(word);
 }
 
@@ -501,17 +590,17 @@ function getArticleSelectFields() {
             id: true,
             slug: true,
             name: true,
-          }
-        }
-      }
+          },
+        },
+      },
     },
     category: {
       select: {
         id: true,
         slug: true,
         name: true,
-      }
-    }
+      },
+    },
   };
 }
 
@@ -520,15 +609,15 @@ function getArticleSelectFields() {
  */
 function getFromCache(key: string): CacheEntry | null {
   const entry = relatedArticlesCache.get(key);
-  
+
   if (!entry) return null;
-  
+
   // Check if expired
   if (Date.now() > entry.expiresAt) {
     relatedArticlesCache.delete(key);
     return null;
   }
-  
+
   return entry;
 }
 
@@ -540,9 +629,9 @@ function setCache(key: string, result: RelatedArticlesResult): void {
     timestamp: Date.now(),
     expiresAt: Date.now() + CACHE_TTL,
   };
-  
+
   relatedArticlesCache.set(key, entry);
-  
+
   // Simple cache cleanup - remove expired entries periodically
   if (relatedArticlesCache.size > 1000) {
     cleanupCache();
@@ -561,7 +650,7 @@ function cleanupCache(): void {
 /**
  * Get cache statistics for monitoring
  */
-export function getCacheStats(): { size: number, hitRate?: number } {
+export function getCacheStats(): { size: number; hitRate?: number } {
   return {
     size: relatedArticlesCache.size,
     // In production, you'd track hit rate properly
@@ -579,12 +668,14 @@ export function clearCache(): void {
  * Warm up cache for popular articles
  */
 export async function warmUpCache(articleSlugs: string[]): Promise<void> {
-  const promises = articleSlugs.map(slug => 
+  const promises = articleSlugs.map((slug) =>
     getRelatedArticles({
-      slug, limit: 6, algorithm: 'hybrid',
-      includeBreaking: false
+      slug,
+      limit: 6,
+      algorithm: 'hybrid',
+      includeBreaking: false,
     })
   );
-  
+
   await Promise.allSettled(promises);
 }

@@ -1,6 +1,6 @@
-import { PrismaClient, ArticleStatus } from "@prisma/client";
-import { MEGA_NAV } from "../src/data/mega-nav.js"; // ✅ ESM requires .js
-import { SETTINGS_CONFIG } from "../src/data/settings-config.js"; // ✅ ESM requires .js
+import { PrismaClient, ArticleStatus } from '@prisma/client';
+import { MEGA_NAV } from '../src/data/mega-nav.js'; // ✅ ESM requires .js
+import { SETTINGS_CONFIG } from '../src/data/settings-config.js'; // ✅ ESM requires .js
 
 const prisma = new PrismaClient();
 
@@ -17,19 +17,13 @@ function extractTopics(categorySlug: string): string[] {
   const cfg = MEGA_NAV[categorySlug];
   if (!cfg) return [];
 
-  const allItems = [
-    ...cfg.explore.items,
-    ...cfg.shop.items,
-  ];
+  const allItems = [...cfg.explore.items, ...cfg.shop.items];
 
   return Array.from(
     new Set(
       allItems
-        .map((i) => i.href.split("/").pop())
-        .filter(
-          (t): t is string =>
-            typeof t === "string" && t.length > 0 && t !== "latest"
-        )
+        .map((i) => i.href.split('/').pop())
+        .filter((t): t is string => typeof t === 'string' && t.length > 0 && t !== 'latest')
     )
   );
 }
@@ -38,7 +32,6 @@ function extractTopics(categorySlug: string): string[] {
    Seed
 ========================= */
 async function main() {
-
   const categoryMap: Record<string, string> = {};
 
   /* ---------- Categories ---------- */
@@ -56,7 +49,7 @@ async function main() {
   }
 
   /* ---------- Settings ---------- */
-  
+
   for (const config of SETTINGS_CONFIG) {
     await prisma.setting.upsert({
       where: { key: config.key },
@@ -75,74 +68,70 @@ async function main() {
 
   /* ---------- Sample Article (Tech) ---------- */
   await prisma.article.upsert({
-    where: { slug: "welcome-to-pulse-news" },
+    where: { slug: 'welcome-to-pulse-news' },
     update: {},
     create: {
-      title: "Welcome to Pulse News",
-      slug: "welcome-to-pulse-news",
-      excerpt: "A starter article seeded into PostgreSQL via Prisma.",
+      title: 'Welcome to Pulse News',
+      slug: 'welcome-to-pulse-news',
+      excerpt: 'A starter article seeded into PostgreSQL via Prisma.',
       status: ArticleStatus.PUBLISHED,
       publishedAt: new Date(),
-      categoryId: categoryMap["tech"],
-      topic: extractTopics("tech")[0] ?? null,
+      categoryId: categoryMap['tech'],
+      topic: extractTopics('tech')[0] ?? null,
       contentJson: {
         time: Date.now(),
         blocks: [
-          { type: "header", data: { text: "Pulse News", level: 2 } },
+          { type: 'header', data: { text: 'Pulse News', level: 2 } },
           {
-            type: "paragraph",
+            type: 'paragraph',
             data: {
-              text: "This article is rendered from Editor.js JSON blocks.",
+              text: 'This article is rendered from Editor.js JSON blocks.',
             },
           },
           {
-            type: "quote",
+            type: 'quote',
             data: {
-              text: "Build fast. Ship safely.",
-              caption: "Pulse Team",
+              text: 'Build fast. Ship safely.',
+              caption: 'Pulse Team',
             },
           },
           {
-            type: "list",
+            type: 'list',
             data: {
-              style: "unordered",
-              items: [
-                "Next.js App Router",
-                "GraphQL API",
-                "PostgreSQL + Prisma",
-              ],
+              style: 'unordered',
+              items: ['Next.js App Router', 'GraphQL API', 'PostgreSQL + Prisma'],
             },
           },
         ],
-        version: "2.30.2",
+        version: '2.30.2',
       },
     },
   });
 
   /* ---------- Sample Article (World) ---------- */
   await prisma.article.upsert({
-    where: { slug: "world-briefing-sample" },
+    where: { slug: 'world-briefing-sample' },
     update: {},
     create: {
-      title: "World Briefing Sample",
-      slug: "world-briefing-sample",
-      excerpt: "Sample article in the World category.",
+      title: 'World Briefing Sample',
+      slug: 'world-briefing-sample',
+      excerpt: 'Sample article in the World category.',
       status: ArticleStatus.PUBLISHED,
       publishedAt: new Date(),
-      categoryId: categoryMap["world"],
-      topic: extractTopics("world")[0] ?? null,
+      categoryId: categoryMap['world'],
+      topic: extractTopics('world')[0] ?? null,
       contentJson: {
         time: Date.now(),
         blocks: [
-          { type: "header", data: { text: "World Briefing", level: 2 } },
+          { type: 'header', data: { text: 'World Briefing', level: 2 } },
           {
-            type: "paragraph",
+            type: 'paragraph',
             data: {
-              text: "This is a sample World article. Replace it with real reporting.",
+              text: 'This is a sample World article. Replace it with real reporting.',
             },
           },
         ],
-        version: "2.30.2",
+        version: '2.30.2',
       },
     },
   });

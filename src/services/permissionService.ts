@@ -12,7 +12,7 @@ export enum Permission {
   DELETE_USER = 'DELETE_USER',
   VIEW_ALL_USERS = 'VIEW_ALL_USERS',
   MANAGE_USER_ROLES = 'MANAGE_USER_ROLES',
-  
+
   // Article Management
   CREATE_ARTICLE = 'CREATE_ARTICLE',
   UPDATE_OWN_ARTICLE = 'UPDATE_OWN_ARTICLE',
@@ -21,26 +21,27 @@ export enum Permission {
   DELETE_ANY_ARTICLE = 'DELETE_ANY_ARTICLE',
   PUBLISH_ARTICLE = 'PUBLISH_ARTICLE',
   UNPUBLISH_ARTICLE = 'UNPUBLISH_ARTICLE',
-  
+  PREVIEW_ARTICLE = 'PREVIEW_ARTICLE',
+
   // Article Features
   SET_FEATURED = 'SET_FEATURED',
   SET_BREAKING_NEWS = 'SET_BREAKING_NEWS',
   SET_EDITORS_PICK = 'SET_EDITORS_PICK',
-  
+
   // Content Review
   REVIEW_ARTICLES = 'REVIEW_ARTICLES',
   APPROVE_ARTICLES = 'APPROVE_ARTICLES',
   REJECT_ARTICLES = 'REJECT_ARTICLES',
-  
+
   // Category Management
   CREATE_CATEGORY = 'CREATE_CATEGORY',
   UPDATE_CATEGORY = 'UPDATE_CATEGORY',
   DELETE_CATEGORY = 'DELETE_CATEGORY',
-  
+
   // Settings Management
   VIEW_SETTINGS = 'VIEW_SETTINGS',
   UPDATE_SETTINGS = 'UPDATE_SETTINGS',
-  
+
   // System Management
   VIEW_AUDIT_LOGS = 'VIEW_AUDIT_LOGS',
   SYSTEM_ADMINISTRATION = 'SYSTEM_ADMINISTRATION',
@@ -64,6 +65,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.DELETE_ANY_ARTICLE,
     Permission.PUBLISH_ARTICLE,
     Permission.UNPUBLISH_ARTICLE,
+    Permission.PREVIEW_ARTICLE,
     Permission.SET_FEATURED,
     Permission.SET_BREAKING_NEWS,
     Permission.SET_EDITORS_PICK,
@@ -87,6 +89,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.DELETE_OWN_ARTICLE,
     Permission.PUBLISH_ARTICLE,
     Permission.UNPUBLISH_ARTICLE,
+    Permission.PREVIEW_ARTICLE,
     Permission.SET_FEATURED,
     Permission.SET_BREAKING_NEWS,
     Permission.SET_EDITORS_PICK,
@@ -102,6 +105,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.CREATE_ARTICLE,
     Permission.UPDATE_OWN_ARTICLE,
     Permission.DELETE_OWN_ARTICLE,
+    Permission.PREVIEW_ARTICLE,
   ],
 };
 
@@ -115,9 +119,7 @@ export class PermissionService {
   static hasPermission(userRole: UserRole, permission: Permission): boolean {
     const rolePermissions = ROLE_PERMISSIONS[userRole];
     const hasPermission = rolePermissions?.includes(permission) || false;
-    
 
-    
     return hasPermission;
   }
 
@@ -125,14 +127,14 @@ export class PermissionService {
    * Check if a user has any of the specified permissions
    */
   static hasAnyPermission(userRole: UserRole, permissions: Permission[]): boolean {
-    return permissions.some(permission => this.hasPermission(userRole, permission));
+    return permissions.some((permission) => this.hasPermission(userRole, permission));
   }
 
   /**
    * Check if a user has all of the specified permissions
    */
   static hasAllPermissions(userRole: UserRole, permissions: Permission[]): boolean {
-    return permissions.every(permission => this.hasPermission(userRole, permission));
+    return permissions.every((permission) => this.hasPermission(userRole, permission));
   }
 
   /**
@@ -203,7 +205,9 @@ export class PermissionService {
     }
 
     if (!this.canAccessResource(context, resourceUserId, requiredPermissions)) {
-      throw new Error('Access denied: You can only access your own resources or need elevated permissions');
+      throw new Error(
+        'Access denied: You can only access your own resources or need elevated permissions'
+      );
     }
   }
 
@@ -216,30 +220,28 @@ export class PermissionService {
     targetStatus: string,
     isOwner: boolean
   ): boolean {
-
     switch (targetStatus) {
       case 'DRAFT':
         // Anyone can save as draft if they own it, or editors/admins can modify any
         return isOwner || this.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE);
-      
+
       case 'REVIEW':
         // Authors can submit for review, editors/admins can move to review
-        const authorCheck = isOwner && (userRole === UserRole.AUTHOR || String(userRole) === 'AUTHOR');
+        const authorCheck =
+          isOwner && (userRole === UserRole.AUTHOR || String(userRole) === 'AUTHOR');
         const reviewPermission = this.hasPermission(userRole, Permission.REVIEW_ARTICLES);
         const reviewResult = authorCheck || reviewPermission;
-        
 
-        
         return reviewResult;
-      
+
       case 'PUBLISHED':
         // Only editors and admins can publish
         return this.hasPermission(userRole, Permission.PUBLISH_ARTICLE);
-      
+
       case 'ARCHIVED':
         // Only editors and admins can archive
         return this.hasPermission(userRole, Permission.UNPUBLISH_ARTICLE);
-      
+
       default:
         return false;
     }
@@ -257,8 +259,10 @@ export class PermissionService {
     const statuses = ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'];
 
     for (const status of statuses) {
-      if (status !== currentStatus && 
-          this.canPerformWorkflowAction(userRole, currentStatus, status, isOwner)) {
+      if (
+        status !== currentStatus &&
+        this.canPerformWorkflowAction(userRole, currentStatus, status, isOwner)
+      ) {
         actions.push(status);
       }
     }
@@ -273,7 +277,7 @@ export class PermissionService {
     return this.hasAnyPermission(userRole, [
       Permission.SET_FEATURED,
       Permission.SET_BREAKING_NEWS,
-      Permission.SET_EDITORS_PICK
+      Permission.SET_EDITORS_PICK,
     ]);
   }
 
@@ -286,17 +290,17 @@ export class PermissionService {
     description: string;
   } {
     const permissions = this.getRolePermissions(userRole);
-    
+
     const descriptions = {
       [UserRole.ADMIN]: 'Full system control and platform governance',
       [UserRole.EDITOR]: 'Content quality, accuracy, and compliance management',
-      [UserRole.AUTHOR]: 'Content creation and maintenance'
+      [UserRole.AUTHOR]: 'Content creation and maintenance',
     };
 
     return {
       role: userRole,
-      permissions: permissions.map(p => p.toString()),
-      description: descriptions[userRole]
+      permissions: permissions.map((p) => p.toString()),
+      description: descriptions[userRole],
     };
   }
 }
@@ -307,7 +311,7 @@ export class PermissionService {
 export function requirePermissions(...permissions: Permission[]) {
   return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
     const method = descriptor.value;
-    
+
     descriptor.value = function (...args: any[]) {
       const context = args[1] as GraphQLContext; // Assuming context is second argument
       PermissionService.requireAnyPermission(context, permissions);
@@ -325,12 +329,12 @@ export function requireResourceOwnership(
 ) {
   return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
     const method = descriptor.value;
-    
+
     descriptor.value = function (...args: any[]) {
       const resolverArgs = args[0];
       const context = args[1] as GraphQLContext;
       const resourceUserId = resourceUserIdGetter(resolverArgs);
-      
+
       PermissionService.requireResourceAccess(context, resourceUserId, fallbackPermissions);
       return method.apply(this, args);
     };

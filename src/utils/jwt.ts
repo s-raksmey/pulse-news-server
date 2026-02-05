@@ -2,7 +2,8 @@ import jwt, { SignOptions } from 'jsonwebtoken';
 import { UserRole } from '@prisma/client';
 
 // JWT Secret - in production, this should be in environment variables
-const JWT_SECRET: string = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+const JWT_SECRET: string =
+  process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface JWTPayload {
@@ -62,12 +63,12 @@ export function verifyToken(token: string): JWTPayload | null {
  */
 export function extractTokenFromHeader(authHeader?: string): string | null {
   if (!authHeader) return null;
-  
+
   const parts = authHeader.split(' ');
   if (parts.length !== 2 || parts[0] !== 'Bearer') {
     return null;
   }
-  
+
   return parts[1];
 }
 

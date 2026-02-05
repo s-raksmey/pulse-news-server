@@ -36,12 +36,15 @@ export interface AuthResponse {
 /**
  * Register a new user
  */
-export async function registerUser(args: {
-  email: string;
-  password: string;
-  name: string;
-  role?: UserRole;
-}, request?: Request): Promise<AuthResponse> {
+export async function registerUser(
+  args: {
+    email: string;
+    password: string;
+    name: string;
+    role?: UserRole;
+  },
+  request?: Request
+): Promise<AuthResponse> {
   try {
     // Validate input
     const validatedInput = RegisterInput.parse(args);
@@ -112,11 +115,11 @@ export async function registerUser(args: {
     };
   } catch (error) {
     console.error('Registration error:', error);
-    
+
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        message: error.errors.map(e => e.message).join(', '),
+        message: error.errors.map((e) => e.message).join(', '),
       };
     }
 
@@ -130,10 +133,13 @@ export async function registerUser(args: {
 /**
  * Login user
  */
-export async function loginUser(args: {
-  email: string;
-  password: string;
-}, request?: Request): Promise<AuthResponse> {
+export async function loginUser(
+  args: {
+    email: string;
+    password: string;
+  },
+  request?: Request
+): Promise<AuthResponse> {
   try {
     // Validate input
     const validatedInput = LoginInput.parse(args);
@@ -216,11 +222,11 @@ export async function loginUser(args: {
     };
   } catch (error) {
     console.error('Login error:', error);
-    
+
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        message: error.errors.map(e => e.message).join(', '),
+        message: error.errors.map((e) => e.message).join(', '),
       };
     }
 

@@ -10,7 +10,7 @@ export enum AuditEventType {
   USER_LOGIN = 'USER_LOGIN',
   USER_LOGOUT = 'USER_LOGOUT',
   USER_REGISTRATION = 'USER_REGISTRATION',
-  
+
   // User Management Events
   USER_CREATED = 'USER_CREATED',
   USER_UPDATED = 'USER_UPDATED',
@@ -18,7 +18,7 @@ export enum AuditEventType {
   USER_ROLE_CHANGED = 'USER_ROLE_CHANGED',
   USER_STATUS_CHANGED = 'USER_STATUS_CHANGED',
   PASSWORD_CHANGED = 'PASSWORD_CHANGED',
-  
+
   // Article Events
   ARTICLE_CREATED = 'ARTICLE_CREATED',
   ARTICLE_UPDATED = 'ARTICLE_UPDATED',
@@ -26,7 +26,7 @@ export enum AuditEventType {
   ARTICLE_STATUS_CHANGED = 'ARTICLE_STATUS_CHANGED',
   ARTICLE_PUBLISHED = 'ARTICLE_PUBLISHED',
   ARTICLE_UNPUBLISHED = 'ARTICLE_UNPUBLISHED',
-  
+
   // Article Feature Events
   ARTICLE_FEATURED = 'ARTICLE_FEATURED',
   ARTICLE_UNFEATURED = 'ARTICLE_UNFEATURED',
@@ -34,21 +34,21 @@ export enum AuditEventType {
   ARTICLE_BREAKING_UNSET = 'ARTICLE_BREAKING_UNSET',
   ARTICLE_EDITORS_PICK_SET = 'ARTICLE_EDITORS_PICK_SET',
   ARTICLE_EDITORS_PICK_UNSET = 'ARTICLE_EDITORS_PICK_UNSET',
-  
+
   // Content Review Events
   ARTICLE_SUBMITTED_FOR_REVIEW = 'ARTICLE_SUBMITTED_FOR_REVIEW',
   ARTICLE_APPROVED = 'ARTICLE_APPROVED',
   ARTICLE_REJECTED = 'ARTICLE_REJECTED',
-  
+
   // Category Events
   CATEGORY_CREATED = 'CATEGORY_CREATED',
   CATEGORY_UPDATED = 'CATEGORY_UPDATED',
   CATEGORY_DELETED = 'CATEGORY_DELETED',
-  
+
   // Settings Events
   SETTING_UPDATED = 'SETTING_UPDATED',
   SETTINGS_BULK_UPDATED = 'SETTINGS_BULK_UPDATED',
-  
+
   // Security Events
   PERMISSION_DENIED = 'PERMISSION_DENIED',
   UNAUTHORIZED_ACCESS_ATTEMPT = 'UNAUTHORIZED_ACCESS_ATTEMPT',
@@ -285,23 +285,20 @@ export class AuditService {
   ): Promise<void> {
     // Calculate what changed
     const changes: Record<string, { before: any; after: any }> = {};
-    
+
     if (beforeData && afterData) {
-      const allKeys = new Set([
-        ...Object.keys(beforeData),
-        ...Object.keys(afterData),
-      ]);
-      
-      allKeys.forEach(key => {
+      const allKeys = new Set([...Object.keys(beforeData), ...Object.keys(afterData)]);
+
+      allKeys.forEach((key) => {
         const before = beforeData[key];
         const after = afterData[key];
-        
+
         if (JSON.stringify(before) !== JSON.stringify(after)) {
           changes[key] = { before, after };
         }
       });
     }
-    
+
     await this.logEvent({
       eventType,
       userId,
@@ -374,12 +371,7 @@ export class AuditService {
     if (!request) return undefined;
 
     // Check various headers for IP address
-    const headers = [
-      'x-forwarded-for',
-      'x-real-ip',
-      'x-client-ip',
-      'cf-connecting-ip',
-    ];
+    const headers = ['x-forwarded-for', 'x-real-ip', 'x-client-ip', 'cf-connecting-ip'];
 
     for (const header of headers) {
       const value = request.headers.get(header);
@@ -419,7 +411,7 @@ export class AuditService {
     if (filters.eventType) where.eventType = filters.eventType;
     if (filters.resourceId) where.resourceId = filters.resourceId;
     if (filters.resourceType) where.resourceType = filters.resourceType;
-    
+
     if (filters.startDate || filters.endDate) {
       where.createdAt = {};
       if (filters.startDate) where.createdAt.gte = filters.startDate;
@@ -433,7 +425,7 @@ export class AuditService {
       skip: filters.offset || 0,
     });
 
-    return logs.map(log => ({
+    return logs.map((log) => ({
       id: log.id,
       eventType: log.eventType as AuditEventType,
       userId: log.userId || undefined,
@@ -460,7 +452,7 @@ export class AuditService {
   }> {
     const now = new Date();
     const startDate = new Date();
-    
+
     switch (timeframe) {
       case 'day':
         startDate.setDate(now.getDate() - 1);
@@ -490,7 +482,7 @@ export class AuditService {
     });
 
     const eventsByType: Record<string, number> = {};
-    eventTypeGroups.forEach(group => {
+    eventTypeGroups.forEach((group) => {
       eventsByType[group.eventType] = group._count;
     });
 
@@ -500,7 +492,7 @@ export class AuditService {
       AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT,
       AuditEventType.SUSPICIOUS_ACTIVITY,
     ];
-    
+
     const securityEvents = await prisma.auditLog.count({
       where: {
         createdAt: { gte: startDate },
@@ -514,7 +506,7 @@ export class AuditService {
       AuditEventType.USER_LOGOUT,
       AuditEventType.USER_REGISTRATION,
     ];
-    
+
     const userActivity = await prisma.auditLog.count({
       where: {
         createdAt: { gte: startDate },
@@ -537,15 +529,15 @@ export class AuditService {
 export function auditLog(eventType: AuditEventType, resourceType?: string) {
   return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
     const method = descriptor.value;
-    
+
     descriptor.value = async function (...args: any[]) {
       const resolverArgs = args[0];
       const context = args[1] as GraphQLContext;
       const auditContext = AuditService.createAuditContext(context);
-      
+
       try {
         const result = await method.apply(this, args);
-        
+
         // Log successful operation
         await AuditService.logEvent({
           eventType,
@@ -560,7 +552,7 @@ export function auditLog(eventType: AuditEventType, resourceType?: string) {
           ipAddress: auditContext.ipAddress,
           userAgent: auditContext.userAgent,
         });
-        
+
         return result;
       } catch (error) {
         // Log failed operation
@@ -578,7 +570,7 @@ export function auditLog(eventType: AuditEventType, resourceType?: string) {
           ipAddress: auditContext.ipAddress,
           userAgent: auditContext.userAgent,
         });
-        
+
         throw error;
       }
     };
