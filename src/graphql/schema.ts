@@ -1,5 +1,6 @@
 import { createSchema } from 'graphql-yoga';
 import { prisma } from '../lib/prisma';
+import { Prisma } from '@prisma/client';
 import { GraphQLJSONObject } from 'graphql-scalars';
 import { z } from 'zod';
 import { registerUser, loginUser, getCurrentUser } from '../resolvers/auth';
@@ -12,9 +13,9 @@ import {
   requirePreview,
 } from '../middleware/auth';
 
-import { searchArticles, getSearchSuggestions, SearchInput } from '../services/searchService';
-import { getRelatedArticles, RelatedArticlesInput } from '../services/relatedArticlesService';
-import { SETTINGS_CONFIG, getSettingConfig } from '../data/settings-config';
+import { searchArticles, getSearchSuggestions } from '../services/searchService';
+import { getRelatedArticles } from '../services/relatedArticlesService';
+import { getSettingConfig } from '../data/settings-config';
 
 /**
  * IMPORTANT:
@@ -64,6 +65,33 @@ const TopicInput = z.object({
   coverVideoUrl: z.string().optional().nullable(),
 });
 
+const RevisionChangesInput = z
+  .object({
+    title: z.string().min(3).optional(),
+    excerpt: z.string().optional().nullable(),
+    topic: z.string().optional().nullable(),
+    contentJson: z.any().optional(),
+    coverImageUrl: z.string().optional().nullable(),
+    seoTitle: z.string().optional().nullable(),
+    seoDescription: z.string().optional().nullable(),
+    ogImageUrl: z.string().optional().nullable(),
+    categorySlug: z.string().optional().nullable(),
+    tagSlugs: z.array(z.string()).optional(),
+    isFeatured: z.boolean().optional(),
+    isEditorsPick: z.boolean().optional(),
+    isBreaking: z.boolean().optional(),
+    pinnedAt: z.string().optional().nullable(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one change is required',
+  });
+
+const RevisionRequestInput = z.object({
+  articleId: z.string().min(1, 'Article ID is required'),
+  note: z.string().optional().nullable(),
+  changes: RevisionChangesInput,
+});
+
 function toIso(d?: Date | null): string | null {
   return d ? d.toISOString() : null;
 }
@@ -74,6 +102,19 @@ function normalizeTagSlug(slug: string) {
     .toLowerCase()
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '');
+}
+
+function normalizeRevisionChanges(changes: z.infer<typeof RevisionChangesInput>) {
+  if (!changes.tagSlugs) return changes;
+
+  const unique = Array.from(
+    new Set(changes.tagSlugs.map(normalizeTagSlug).filter(Boolean))
+  );
+
+  return {
+    ...changes,
+    tagSlugs: unique,
+  };
 }
 
 let breakingColumnAvailable: boolean | null = null;
@@ -140,6 +181,8 @@ async function getArticleSelect() {
     publishedAt: true,
     createdAt: true,
     updatedAt: true,
+    revisionStatus: true,
+    revisionRequestedAt: true,
     categoryId: true,
     category: {
       select: {
@@ -171,6 +214,23 @@ export const schema = createSchema({
       REVIEW
       PUBLISHED
       ARCHIVED
+    }
+
+    enum ArticleRevisionStatus {
+      NONE
+      REQUESTED
+    }
+
+    enum RevisionRequestStatus {
+      PENDING
+      APPROVED
+      REJECTED
+    }
+
+    enum BreakingNewsRequestStatus {
+      PENDING
+      APPROVED
+      REJECTED
     }
 
     enum SettingType {
@@ -220,6 +280,9 @@ export const schema = createSchema({
       pinnedAt: String
       viewCount: Int
 
+      revisionStatus: ArticleRevisionStatus!
+      revisionRequestedAt: String
+
       publishedAt: String
       createdAt: String!
       updatedAt: String!
@@ -227,6 +290,43 @@ export const schema = createSchema({
       category: Category
       author: User
       tags: [Tag!]
+    }
+
+    type ArticleRevisionRequest {
+      id: ID!
+      status: RevisionRequestStatus!
+      note: String
+      proposedChanges: JSON!
+      reviewComment: String
+      reviewedAt: String
+      createdAt: String!
+      updatedAt: String!
+      article: Article!
+      requester: User!
+      reviewedBy: User
+    }
+
+    type ArticleRevision {
+      id: ID!
+      summary: String
+      changes: JSON!
+      appliedAt: String!
+      article: Article!
+      revisionRequest: ArticleRevisionRequest
+      appliedBy: User!
+    }
+
+    type BreakingNewsRequest {
+      id: ID!
+      status: BreakingNewsRequestStatus!
+      reason: String
+      reviewComment: String
+      reviewedAt: String
+      createdAt: String!
+      updatedAt: String!
+      article: Article!
+      requester: User!
+      reviewedBy: User
     }
 
     enum UserRole {
@@ -517,6 +617,14 @@ export const schema = createSchema({
       getPermissionSummary(role: UserRole!): PermissionSummary!
       getAvailableWorkflowActions(articleId: ID!): [WorkflowAction!]!
 
+      # Revision workflow queries
+      revisionRequests(articleId: ID!, status: RevisionRequestStatus): [ArticleRevisionRequest!]!
+      articleRevisionHistory(articleId: ID!, limit: Int = 20, skip: Int = 0): [ArticleRevision!]!
+
+      # Breaking news workflow queries
+      breakingNewsRequests(articleId: ID, status: BreakingNewsRequestStatus): [BreakingNewsRequest!]!
+      pendingBreakingNewsRequests: [BreakingNewsRequest!]!
+
       # Settings queries
       settings(type: SettingType): [Setting!]!
       setting(key: String!): Setting
@@ -561,6 +669,16 @@ export const schema = createSchema({
       # Workflow mutations
       performWorkflowAction(input: WorkflowActionInput!): WorkflowActionResult!
       performBulkWorkflowAction(input: BulkWorkflowActionInput!): BulkWorkflowActionResult!
+
+      # Revision workflow mutations
+      requestArticleRevision(input: RequestArticleRevisionInput!): ArticleRevisionRequest!
+      approveArticleRevision(requestId: ID!, reviewComment: String): Article!
+      rejectArticleRevision(requestId: ID!, reviewComment: String): ArticleRevisionRequest!
+
+      # Breaking news workflow mutations
+      requestBreakingNews(articleId: ID!, reason: String): BreakingNewsRequest!
+      approveBreakingNews(requestId: ID!, reviewComment: String): Article!
+      rejectBreakingNews(requestId: ID!, reviewComment: String): BreakingNewsRequest!
 
       # Settings mutations
       updateSetting(input: UpdateSettingInput!): Setting!
@@ -800,6 +918,29 @@ export const schema = createSchema({
       newPassword: String!
     }
 
+    input ArticleRevisionChangesInput {
+      title: String
+      excerpt: String
+      topic: String
+      contentJson: JSON
+      coverImageUrl: String
+      seoTitle: String
+      seoDescription: String
+      ogImageUrl: String
+      categorySlug: String
+      tagSlugs: [String!]
+      isFeatured: Boolean
+      isEditorsPick: Boolean
+      isBreaking: Boolean
+      pinnedAt: String
+    }
+
+    input RequestArticleRevisionInput {
+      articleId: ID!
+      note: String
+      changes: ArticleRevisionChangesInput!
+    }
+
     input UpdateSettingInput {
       key: String!
       value: JSON!
@@ -929,6 +1070,7 @@ export const schema = createSchema({
       updatedAt: (p: any) => toIso(p.updatedAt),
       publishedAt: (p: any) => toIso(p.publishedAt),
       pinnedAt: (p: any) => toIso(p.pinnedAt),
+      revisionRequestedAt: (p: any) => toIso(p.revisionRequestedAt),
       isBreaking: (p: any) => p.isBreaking ?? false,
 
       category: async (parent: any) => {
@@ -953,6 +1095,73 @@ export const schema = createSchema({
       category: async (parent: any) => {
         return db.category.findUnique({
           where: { id: parent.categoryId },
+        });
+      },
+    },
+
+    ArticleRevisionRequest: {
+      createdAt: (p: any) => toIso(p.createdAt),
+      updatedAt: (p: any) => toIso(p.updatedAt),
+      reviewedAt: (p: any) => toIso(p.reviewedAt),
+      article: async (p: any) =>
+        p.article ||
+        (await db.article.findUnique({
+          where: { id: p.articleId },
+        })),
+      requester: async (p: any) =>
+        p.requester ||
+        (await db.user.findUnique({
+          where: { id: p.requesterId },
+        })),
+      reviewedBy: async (p: any) => {
+        if (p.reviewedBy) return p.reviewedBy;
+        if (!p.reviewedById) return null;
+        return db.user.findUnique({
+          where: { id: p.reviewedById },
+        });
+      },
+    },
+
+    ArticleRevision: {
+      appliedAt: (p: any) => toIso(p.appliedAt),
+      article: async (p: any) =>
+        p.article ||
+        (await db.article.findUnique({
+          where: { id: p.articleId },
+        })),
+      revisionRequest: async (p: any) => {
+        if (p.revisionRequest) return p.revisionRequest;
+        if (!p.revisionRequestId) return null;
+        return db.articleRevisionRequest.findUnique({
+          where: { id: p.revisionRequestId },
+        });
+      },
+      appliedBy: async (p: any) =>
+        p.appliedBy ||
+        (await db.user.findUnique({
+          where: { id: p.appliedById },
+        })),
+    },
+
+    BreakingNewsRequest: {
+      createdAt: (p: any) => toIso(p.createdAt),
+      updatedAt: (p: any) => toIso(p.updatedAt),
+      reviewedAt: (p: any) => toIso(p.reviewedAt),
+      article: async (p: any) =>
+        p.article ||
+        (await db.article.findUnique({
+          where: { id: p.articleId },
+        })),
+      requester: async (p: any) =>
+        p.requester ||
+        (await db.user.findUnique({
+          where: { id: p.requesterId },
+        })),
+      reviewedBy: async (p: any) => {
+        if (p.reviewedBy) return p.reviewedBy;
+        if (!p.reviewedById) return null;
+        return db.user.findUnique({
+          where: { id: p.reviewedById },
         });
       },
     },
@@ -1559,6 +1768,154 @@ export const schema = createSchema({
 
         return PermissionService.getAvailableWorkflowActions(userRole, article.status, isOwner);
       },
+
+      revisionRequests: async (
+        _: unknown,
+        { articleId, status }: { articleId: string; status?: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        const { PermissionService, Permission } = await import('../services/permissionService');
+
+        const article = await db.article.findUnique({
+          where: { id: articleId },
+          select: { authorId: true },
+        });
+
+        if (!article) {
+          throw new Error('Article not found');
+        }
+
+        const userRole = context.user!.role as any;
+        const isOwner = article.authorId === context.user!.id;
+
+        if (!isOwner && !PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
+          throw new Error('Permission denied: You cannot view revision requests for this article');
+        }
+
+        return db.articleRevisionRequest.findMany({
+          where: {
+            articleId,
+            ...(status ? { status } : {}),
+          },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            article: true,
+            requester: true,
+            reviewedBy: true,
+          },
+        });
+      },
+
+      articleRevisionHistory: async (
+        _: unknown,
+        { articleId, limit, skip }: { articleId: string; limit?: number; skip?: number },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        const { PermissionService, Permission } = await import('../services/permissionService');
+
+        const article = await db.article.findUnique({
+          where: { id: articleId },
+          select: { authorId: true },
+        });
+
+        if (!article) {
+          throw new Error('Article not found');
+        }
+
+        const userRole = context.user!.role as any;
+        const isOwner = article.authorId === context.user!.id;
+
+        if (!isOwner && !PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
+          throw new Error('Permission denied: You cannot view revision history for this article');
+        }
+
+        return db.articleRevision.findMany({
+          where: { articleId },
+          orderBy: { appliedAt: 'desc' },
+          take: limit ?? 20,
+          skip: skip ?? 0,
+          include: {
+            article: true,
+            revisionRequest: true,
+            appliedBy: true,
+          },
+        });
+      },
+
+      breakingNewsRequests: async (
+        _: unknown,
+        { articleId, status }: { articleId?: string; status?: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        const { PermissionService, Permission } = await import('../services/permissionService');
+
+        const userRole = context.user!.role as any;
+        const hasReviewPermission = PermissionService.hasPermission(
+          userRole,
+          Permission.REVIEW_ARTICLES
+        );
+
+        const where: any = {};
+
+        if (articleId) {
+          const article = await db.article.findUnique({
+            where: { id: articleId },
+            select: { authorId: true },
+          });
+
+          if (!article) {
+            throw new Error('Article not found');
+          }
+
+          const isOwner = article.authorId === context.user!.id;
+
+          if (!isOwner && !hasReviewPermission) {
+            throw new Error(
+              'Permission denied: You cannot view breaking news requests for this article'
+            );
+          }
+
+          where.articleId = articleId;
+        } else if (!hasReviewPermission) {
+          where.requesterId = context.user!.id;
+        }
+
+        if (status) {
+          where.status = status;
+        }
+
+        return db.breakingNewsRequest.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            article: true,
+            requester: true,
+            reviewedBy: true,
+          },
+        });
+      },
+
+      pendingBreakingNewsRequests: async (
+        _: unknown,
+        __: unknown,
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireEditor(context);
+
+        return db.breakingNewsRequest.findMany({
+          where: { status: 'PENDING' },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            article: true,
+            requester: true,
+            reviewedBy: true,
+          },
+        });
+      },
     },
 
     Mutation: {
@@ -1672,8 +2029,6 @@ export const schema = createSchema({
 
         // Enhanced category assignment with validation and fallback
         let category = null;
-        let categoryAssignmentLog = '';
-
         if (data.categorySlug) {
           // Try to find the requested category
           category = await db.category.findFirst({
@@ -1681,9 +2036,7 @@ export const schema = createSchema({
             select: { id: true, slug: true, name: true },
           });
 
-          if (category) {
-            categoryAssignmentLog = `✅ Found category: ${category.slug} (${category.name})`;
-          } else {
+          if (!category) {
             // Category not found - return error with available categories
             const availableCategories = await db.category.findMany({
               select: { slug: true, name: true },
@@ -1695,8 +2048,6 @@ export const schema = createSchema({
               `Invalid category "${data.categorySlug}". Available categories: ${availableSlugs}`
             );
           }
-        } else {
-          categoryAssignmentLog = 'ℹ️ No categorySlug provided';
         }
 
         const status = data.status ?? 'DRAFT';
@@ -2288,6 +2639,510 @@ export const schema = createSchema({
       ) => {
         const { ArticleWorkflowService } = await import('../services/articleWorkflowService');
         return await ArticleWorkflowService.performBulkWorkflowAction(context, input);
+      },
+
+      requestArticleRevision: async (
+        _: unknown,
+        { input }: { input: any },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        const data = RevisionRequestInput.parse(input);
+
+        const { PermissionService, Permission } = await import('../services/permissionService');
+        const { AuditService, AuditEventType } = await import('../services/auditService');
+
+        const article = await db.article.findUnique({
+          where: { id: data.articleId },
+          select: {
+            id: true,
+            status: true,
+            authorId: true,
+            revisionStatus: true,
+            title: true,
+          },
+        });
+
+        if (!article) {
+          throw new Error('Article not found');
+        }
+
+        if (article.status !== 'PUBLISHED') {
+          throw new Error('Only published articles can be revised');
+        }
+
+        const userRole = context.user!.role as any;
+        const isOwner = article.authorId === context.user!.id;
+
+        if (!isOwner && !PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
+          await AuditService.logPermissionDenied(
+            context.user!.id,
+            'REQUEST_REVISION',
+            article.id,
+            'Article',
+            context.request
+          );
+          throw new Error('Permission denied: You cannot request revisions for this article');
+        }
+
+        const pendingRequest = await db.articleRevisionRequest.findFirst({
+          where: { articleId: article.id, status: 'PENDING' },
+          select: { id: true },
+        });
+
+        if (pendingRequest || article.revisionStatus === 'REQUESTED') {
+          throw new Error('A revision request is already pending for this article');
+        }
+
+        const normalizedChanges = normalizeRevisionChanges(data.changes);
+
+        const request = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+          const created = await tx.articleRevisionRequest.create({
+            data: {
+              articleId: article.id,
+              requesterId: context.user!.id,
+              note: data.note ?? null,
+              proposedChanges: normalizedChanges,
+              status: 'PENDING',
+            },
+            include: {
+              article: true,
+              requester: true,
+              reviewedBy: true,
+            },
+          });
+
+          await tx.article.update({
+            where: { id: article.id },
+            data: {
+              revisionStatus: 'REQUESTED',
+              revisionRequestedAt: new Date(),
+            },
+          });
+
+          return created;
+        });
+
+        await AuditService.logArticleEvent(
+          AuditEventType.REVISION_REQUESTED,
+          context.user!.id,
+          article.id,
+          {
+            title: article.title,
+            note: data.note ?? undefined,
+          },
+          context.request
+        );
+
+        return request;
+      },
+
+      approveArticleRevision: async (
+        _: unknown,
+        { requestId, reviewComment }: { requestId: string; reviewComment?: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireEditor(context);
+
+        const { AuditService, AuditEventType } = await import('../services/auditService');
+
+        const request = await db.articleRevisionRequest.findUnique({
+          where: { id: requestId },
+          include: {
+            article: true,
+          },
+        });
+
+        if (!request) {
+          throw new Error('Revision request not found');
+        }
+
+        if (request.status !== 'PENDING') {
+          throw new Error('Only pending revision requests can be approved');
+        }
+
+        const changes = RevisionChangesInput.parse(request.proposedChanges || {});
+        const normalizedChanges = normalizeRevisionChanges(changes);
+        const includeBreaking = await hasBreakingColumn();
+
+        let categoryId: string | null | undefined = undefined;
+        if (changes.categorySlug !== undefined) {
+          if (changes.categorySlug) {
+            const category = await db.category.findFirst({
+              where: { slug: changes.categorySlug },
+              select: { id: true },
+            });
+            if (!category) {
+              throw new Error(`Invalid category \"${changes.categorySlug}\"`);
+            }
+            categoryId = category.id;
+          } else {
+            categoryId = null;
+          }
+        }
+
+        const payload: any = {
+          revisionStatus: 'NONE',
+          revisionRequestedAt: null,
+        };
+
+        if (normalizedChanges.title !== undefined) payload.title = normalizedChanges.title;
+        if (normalizedChanges.excerpt !== undefined) payload.excerpt = normalizedChanges.excerpt ?? null;
+        if (normalizedChanges.topic !== undefined) payload.topic = normalizedChanges.topic ?? null;
+        if (normalizedChanges.contentJson !== undefined) payload.contentJson = normalizedChanges.contentJson;
+        if (normalizedChanges.coverImageUrl !== undefined) payload.coverImageUrl = normalizedChanges.coverImageUrl;
+        if (normalizedChanges.seoTitle !== undefined) payload.seoTitle = normalizedChanges.seoTitle;
+        if (normalizedChanges.seoDescription !== undefined) {
+          payload.seoDescription = normalizedChanges.seoDescription;
+        }
+        if (normalizedChanges.ogImageUrl !== undefined) payload.ogImageUrl = normalizedChanges.ogImageUrl;
+        if (normalizedChanges.isFeatured !== undefined) payload.isFeatured = normalizedChanges.isFeatured;
+        if (normalizedChanges.isEditorsPick !== undefined) {
+          payload.isEditorsPick = normalizedChanges.isEditorsPick;
+        }
+        if (normalizedChanges.pinnedAt !== undefined) {
+          payload.pinnedAt = normalizedChanges.pinnedAt ? new Date(normalizedChanges.pinnedAt) : null;
+        }
+
+        if (normalizedChanges.isBreaking !== undefined && includeBreaking) {
+          payload.isBreaking = normalizedChanges.isBreaking;
+        }
+
+        if (categoryId !== undefined) {
+          payload.categoryId = categoryId;
+        }
+
+        const select = await getArticleSelect();
+
+        const updatedArticle = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+          const article = await tx.article.update({
+            where: { id: request.articleId },
+            data: payload,
+            select,
+          });
+
+          if (normalizedChanges.tagSlugs) {
+            await tx.articleTag.deleteMany({
+              where: { articleId: request.articleId },
+            });
+
+            for (const slug of normalizedChanges.tagSlugs) {
+              const tag = await tx.tag.upsert({
+                where: { slug },
+                update: {},
+                create: { slug, name: slug },
+              });
+
+              await tx.articleTag.create({
+                data: { articleId: request.articleId, tagId: tag.id },
+              });
+            }
+          }
+
+          await tx.articleRevisionRequest.update({
+            where: { id: requestId },
+            data: {
+              status: 'APPROVED',
+              reviewedById: context.user!.id,
+              reviewedAt: new Date(),
+              reviewComment: reviewComment ?? null,
+            },
+          });
+
+          await tx.articleRevision.create({
+            data: {
+              articleId: request.articleId,
+              revisionRequestId: requestId,
+              appliedById: context.user!.id,
+              summary: reviewComment ?? request.note ?? null,
+              changes: normalizedChanges,
+            },
+          });
+
+          return article;
+        });
+
+        await AuditService.logArticleEvent(
+          AuditEventType.REVISION_APPROVED,
+          context.user!.id,
+          request.articleId,
+          {
+            requestId,
+            reviewComment: reviewComment ?? undefined,
+          },
+          context.request
+        );
+
+        return updatedArticle;
+      },
+
+      rejectArticleRevision: async (
+        _: unknown,
+        { requestId, reviewComment }: { requestId: string; reviewComment?: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireEditor(context);
+
+        const { AuditService, AuditEventType } = await import('../services/auditService');
+
+        const request = await db.articleRevisionRequest.findUnique({
+          where: { id: requestId },
+          select: { id: true, articleId: true, status: true },
+        });
+
+        if (!request) {
+          throw new Error('Revision request not found');
+        }
+
+        if (request.status !== 'PENDING') {
+          throw new Error('Only pending revision requests can be rejected');
+        }
+
+        const updatedRequest = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+          const revisionRequest = await tx.articleRevisionRequest.update({
+            where: { id: requestId },
+            data: {
+              status: 'REJECTED',
+              reviewedById: context.user!.id,
+              reviewedAt: new Date(),
+              reviewComment: reviewComment ?? null,
+            },
+            include: {
+              article: true,
+              requester: true,
+              reviewedBy: true,
+            },
+          });
+
+          await tx.article.update({
+            where: { id: request.articleId },
+            data: {
+              revisionStatus: 'NONE',
+              revisionRequestedAt: null,
+            },
+          });
+
+          return revisionRequest;
+        });
+
+        await AuditService.logArticleEvent(
+          AuditEventType.REVISION_REJECTED,
+          context.user!.id,
+          request.articleId,
+          {
+            requestId,
+            reviewComment: reviewComment ?? undefined,
+          },
+          context.request
+        );
+
+        return updatedRequest;
+      },
+
+      requestBreakingNews: async (
+        _: unknown,
+        { articleId, reason }: { articleId: string; reason?: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+
+        const { PermissionService, Permission } = await import('../services/permissionService');
+        const { AuditService, AuditEventType } = await import('../services/auditService');
+
+        const article = await db.article.findUnique({
+          where: { id: articleId },
+          select: {
+            id: true,
+            status: true,
+            authorId: true,
+            isBreaking: true,
+            title: true,
+          },
+        });
+
+        if (!article) {
+          throw new Error('Article not found');
+        }
+
+        if (article.status !== 'PUBLISHED') {
+          throw new Error('Only published articles can be marked as breaking news');
+        }
+
+        if (article.isBreaking) {
+          throw new Error('Article is already marked as breaking news');
+        }
+
+        const userRole = context.user!.role as any;
+        const isOwner = article.authorId === context.user!.id;
+
+        if (!isOwner && !PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
+          await AuditService.logPermissionDenied(
+            context.user!.id,
+            'REQUEST_BREAKING_NEWS',
+            article.id,
+            'Article',
+            context.request
+          );
+          throw new Error('Permission denied: You cannot request breaking news for this article');
+        }
+
+        const pendingRequest = await db.breakingNewsRequest.findFirst({
+          where: { articleId: article.id, status: 'PENDING' },
+          select: { id: true },
+        });
+
+        if (pendingRequest) {
+          throw new Error('A breaking news request is already pending for this article');
+        }
+
+        const request = await db.breakingNewsRequest.create({
+          data: {
+            articleId: article.id,
+            requesterId: context.user!.id,
+            reason: reason ?? null,
+            status: 'PENDING',
+          },
+          include: {
+            article: true,
+            requester: true,
+            reviewedBy: true,
+          },
+        });
+
+        await AuditService.logArticleEvent(
+          AuditEventType.BREAKING_NEWS_REQUESTED,
+          context.user!.id,
+          article.id,
+          {
+            title: article.title,
+            reason: reason ?? undefined,
+          },
+          context.request
+        );
+
+        return request;
+      },
+
+      approveBreakingNews: async (
+        _: unknown,
+        { requestId, reviewComment }: { requestId: string; reviewComment?: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireEditor(context);
+
+        const { AuditService, AuditEventType } = await import('../services/auditService');
+
+        const request = await db.breakingNewsRequest.findUnique({
+          where: { id: requestId },
+          include: {
+            article: true,
+          },
+        });
+
+        if (!request) {
+          throw new Error('Breaking news request not found');
+        }
+
+        if (request.status !== 'PENDING') {
+          throw new Error('Only pending breaking news requests can be approved');
+        }
+
+        const includeBreaking = await hasBreakingColumn();
+        if (!includeBreaking) {
+          throw new Error('Breaking news feature is not available');
+        }
+
+        const select = await getArticleSelect();
+
+        const updatedArticle = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+          const article = await tx.article.update({
+            where: { id: request.articleId },
+            data: {
+              isBreaking: true,
+            },
+            select,
+          });
+
+          await tx.breakingNewsRequest.update({
+            where: { id: requestId },
+            data: {
+              status: 'APPROVED',
+              reviewedById: context.user!.id,
+              reviewedAt: new Date(),
+              reviewComment: reviewComment ?? null,
+            },
+          });
+
+          return article;
+        });
+
+        await AuditService.logArticleEvent(
+          AuditEventType.BREAKING_NEWS_APPROVED,
+          context.user!.id,
+          request.articleId,
+          {
+            requestId,
+            reviewComment: reviewComment ?? undefined,
+          },
+          context.request
+        );
+
+        return updatedArticle;
+      },
+
+      rejectBreakingNews: async (
+        _: unknown,
+        { requestId, reviewComment }: { requestId: string; reviewComment?: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        requireEditor(context);
+
+        const { AuditService, AuditEventType } = await import('../services/auditService');
+
+        const request = await db.breakingNewsRequest.findUnique({
+          where: { id: requestId },
+          select: { id: true, articleId: true, status: true },
+        });
+
+        if (!request) {
+          throw new Error('Breaking news request not found');
+        }
+
+        if (request.status !== 'PENDING') {
+          throw new Error('Only pending breaking news requests can be rejected');
+        }
+
+        const updatedRequest = await db.breakingNewsRequest.update({
+          where: { id: requestId },
+          data: {
+            status: 'REJECTED',
+            reviewedById: context.user!.id,
+            reviewedAt: new Date(),
+            reviewComment: reviewComment ?? null,
+          },
+          include: {
+            article: true,
+            requester: true,
+            reviewedBy: true,
+          },
+        });
+
+        await AuditService.logArticleEvent(
+          AuditEventType.BREAKING_NEWS_REJECTED,
+          context.user!.id,
+          request.articleId,
+          {
+            requestId,
+            reviewComment: reviewComment ?? undefined,
+          },
+          context.request
+        );
+
+        return updatedRequest;
       },
     },
   },
