@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createSchema } from 'graphql-yoga';
 import { prisma } from '../lib/prisma';
 import { Prisma } from '@prisma/client';
@@ -183,6 +184,9 @@ async function getArticleSelect() {
     updatedAt: true,
     revisionStatus: true,
     revisionRequestedAt: true,
+    breakingNewsRequestStatus: true,
+    breakingNewsRequestedAt: true,
+    breakingNewsRequestedById: true,
     categoryId: true,
     category: {
       select: {
@@ -228,6 +232,7 @@ export const schema = createSchema({
     }
 
     enum BreakingNewsRequestStatus {
+      NONE
       PENDING
       APPROVED
       REJECTED
@@ -283,6 +288,10 @@ export const schema = createSchema({
       revisionStatus: ArticleRevisionStatus!
       revisionRequestedAt: String
 
+      breakingNewsRequestStatus: BreakingNewsRequestStatus!
+      breakingNewsRequestedAt: String
+      breakingNewsRequestedBy: User
+
       publishedAt: String
       createdAt: String!
       updatedAt: String!
@@ -299,11 +308,13 @@ export const schema = createSchema({
       proposedChanges: JSON!
       reviewComment: String
       reviewedAt: String
+      consumedAt: String
       createdAt: String!
       updatedAt: String!
       article: Article!
       requester: User!
       reviewedBy: User
+      consumedBy: User
     }
 
     type ArticleRevision {
@@ -620,6 +631,7 @@ export const schema = createSchema({
       # Revision workflow queries
       revisionRequests(articleId: ID!, status: RevisionRequestStatus): [ArticleRevisionRequest!]!
       articleRevisionHistory(articleId: ID!, limit: Int = 20, skip: Int = 0): [ArticleRevision!]!
+      latestRevisionRequest(articleId: ID!): ArticleRevisionRequest
 
       # Breaking news workflow queries
       breakingNewsRequests(articleId: ID, status: BreakingNewsRequestStatus): [BreakingNewsRequest!]!
@@ -674,10 +686,11 @@ export const schema = createSchema({
       requestArticleRevision(input: RequestArticleRevisionInput!): ArticleRevisionRequest!
       approveArticleRevision(requestId: ID!, reviewComment: String): Article!
       rejectArticleRevision(requestId: ID!, reviewComment: String): ArticleRevisionRequest!
+      consumeArticleRevision(requestId: ID!): ArticleRevisionRequest!
 
       # Breaking news workflow mutations
       requestBreakingNews(articleId: ID!, reason: String): BreakingNewsRequest!
-      approveBreakingNews(requestId: ID!, reviewComment: String): Article!
+      approveBreakingNews(requestId: ID!, reviewComment: String): BreakingNewsRequest!
       rejectBreakingNews(requestId: ID!, reviewComment: String): BreakingNewsRequest!
 
       # Settings mutations
@@ -1016,7 +1029,7 @@ export const schema = createSchema({
             // For settings, the resourceId is the setting key
             return p.resourceId;
           }
-        } catch (error) {
+        } catch {
           // Resource might have been deleted
           return null;
         }
@@ -1071,11 +1084,17 @@ export const schema = createSchema({
       publishedAt: (p: any) => toIso(p.publishedAt),
       pinnedAt: (p: any) => toIso(p.pinnedAt),
       revisionRequestedAt: (p: any) => toIso(p.revisionRequestedAt),
+      breakingNewsRequestedAt: (p: any) => toIso(p.breakingNewsRequestedAt),
       isBreaking: (p: any) => p.isBreaking ?? false,
 
       category: async (parent: any) => {
         if (!parent.categoryId) return null;
         return db.category.findUnique({ where: { id: parent.categoryId } });
+      },
+
+      breakingNewsRequestedBy: async (parent: any) => {
+        if (!parent.breakingNewsRequestedById) return null;
+        return db.user.findUnique({ where: { id: parent.breakingNewsRequestedById } });
       },
 
       tags: async (parent: any) => {
@@ -1103,6 +1122,7 @@ export const schema = createSchema({
       createdAt: (p: any) => toIso(p.createdAt),
       updatedAt: (p: any) => toIso(p.updatedAt),
       reviewedAt: (p: any) => toIso(p.reviewedAt),
+      consumedAt: (p: any) => toIso(p.consumedAt),
       article: async (p: any) =>
         p.article ||
         (await db.article.findUnique({
@@ -1118,6 +1138,13 @@ export const schema = createSchema({
         if (!p.reviewedById) return null;
         return db.user.findUnique({
           where: { id: p.reviewedById },
+        });
+      },
+      consumedBy: async (p: any) => {
+        if (p.consumedBy) return p.consumedBy;
+        if (!p.consumedById) return null;
+        return db.user.findUnique({
+          where: { id: p.consumedById },
         });
       },
     },
@@ -1246,64 +1273,59 @@ export const schema = createSchema({
       categories: async () => db.category.findMany({ orderBy: { name: 'asc' } }),
 
       articles: async (_: unknown, args: any, context: GraphQLContext) => {
-        try {
-          // Require authentication for articles management
-          requireAuth(context);
+        // Require authentication for articles management
+        requireAuth(context);
 
-          // Import permission services with static import for better reliability
-          const { PermissionService, Permission } = await import('../services/permissionService');
+        // Import permission services with static import for better reliability
+        const { PermissionService, Permission } = await import('../services/permissionService');
 
-          const userRole = context.user!.role;
-          const userId = context.user!.id;
+        const userRole = context.user!.role;
+        const userId = context.user!.id;
 
-          // Build where clause for filtering
-          const where: any = {};
+        // Build where clause for filtering
+        const where: any = {};
 
-          if (args.status) {
-            where.status = args.status;
-          }
-
-          if (args.topic) {
-            where.topic = args.topic;
-          }
-
-          if (args.categorySlug) {
-            where.category = { is: { slug: args.categorySlug } };
-          }
-
-          // Handle explicit authorId parameter (for "My Articles" page)
-          if (args.authorId) {
-            where.authorId = args.authorId;
-          } else {
-            // Apply role-based filtering for general articles access
-
-            // Check if user has permission to see all articles
-            const hasUpdateAnyPermission = PermissionService.hasPermission(
-              userRole as any,
-              Permission.UPDATE_ANY_ARTICLE
-            );
-
-            if (!hasUpdateAnyPermission) {
-              // Authors can only see their own articles
-              where.authorId = userId;
-            } else {
-            }
-          }
-
-          const select = await getArticleSelect();
-
-          const articles = await db.article.findMany({
-            where,
-            orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
-            take: args.take ?? 20,
-            skip: args.skip ?? 0,
-            select,
-          });
-
-          return articles;
-        } catch (error) {
-          throw error; // Re-throw to let GraphQL handle the error response
+        if (args.status) {
+          where.status = args.status;
         }
+
+        if (args.topic) {
+          where.topic = args.topic;
+        }
+
+        if (args.categorySlug) {
+          where.category = { is: { slug: args.categorySlug } };
+        }
+
+        // Handle explicit authorId parameter (for "My Articles" page)
+        if (args.authorId) {
+          where.authorId = args.authorId;
+        } else {
+          // Apply role-based filtering for general articles access
+
+          // Check if user has permission to see all articles
+          const hasUpdateAnyPermission = PermissionService.hasPermission(
+            userRole as any,
+            Permission.UPDATE_ANY_ARTICLE
+          );
+
+          if (!hasUpdateAnyPermission) {
+            // Authors can only see their own articles
+            where.authorId = userId;
+          }
+        }
+
+        const select = await getArticleSelect();
+
+        const articles = await db.article.findMany({
+          where,
+          orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+          take: args.take ?? 20,
+          skip: args.skip ?? 0,
+          select,
+        });
+
+        return articles;
       },
 
       articleBySlug: async (_: unknown, { slug }: { slug: string }) => {
@@ -1590,7 +1612,7 @@ export const schema = createSchema({
               // Try to parse as JSON to validate
               JSON.parse(JSON.stringify(setting.value));
               return true;
-            } catch (error) {
+            } catch {
               return false;
             }
           });
@@ -1626,7 +1648,7 @@ export const schema = createSchema({
           // Try to parse as JSON to validate
           JSON.parse(JSON.stringify(setting.value));
           return setting;
-        } catch (error) {
+        } catch {
           return null;
         }
       },
@@ -1653,7 +1675,7 @@ export const schema = createSchema({
             // Try to parse as JSON to validate
             JSON.parse(JSON.stringify(setting.value));
             return true;
-          } catch (error) {
+          } catch {
             return false;
           }
         });
@@ -1844,6 +1866,42 @@ export const schema = createSchema({
         });
       },
 
+      latestRevisionRequest: async (
+        _: unknown,
+        { articleId }: { articleId: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        const { PermissionService, Permission } = await import('../services/permissionService');
+
+        const article = await db.article.findUnique({
+          where: { id: articleId },
+          select: { authorId: true },
+        });
+
+        if (!article) {
+          throw new Error('Article not found');
+        }
+
+        const userRole = context.user!.role as any;
+        const isOwner = article.authorId === context.user!.id;
+
+        if (!isOwner && !PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
+          throw new Error('Permission denied: You cannot view revision requests for this article');
+        }
+
+        return db.articleRevisionRequest.findFirst({
+          where: { articleId },
+          orderBy: [{ reviewedAt: 'desc' }, { createdAt: 'desc' }],
+          include: {
+            article: true,
+            requester: true,
+            reviewedBy: true,
+            consumedBy: true,
+          },
+        });
+      },
+
       breakingNewsRequests: async (
         _: unknown,
         { articleId, status }: { articleId?: string; status?: string },
@@ -1880,7 +1938,7 @@ export const schema = createSchema({
 
           where.articleId = articleId;
         } else if (!hasReviewPermission) {
-          where.requesterId = context.user!.id;
+          where.article = { authorId: context.user!.id };
         }
 
         if (status) {
@@ -1904,10 +1962,22 @@ export const schema = createSchema({
         context: GraphQLContext
       ) => {
         requireAuth(context);
-        requireEditor(context);
+        const { PermissionService, Permission } = await import('../services/permissionService');
+
+        const userRole = context.user!.role as any;
+        const hasReviewPermission = PermissionService.hasPermission(
+          userRole,
+          Permission.REVIEW_ARTICLES
+        );
+
+        const where: any = { status: 'PENDING' };
+
+        if (!hasReviewPermission) {
+          where.article = { authorId: context.user!.id };
+        }
 
         return db.breakingNewsRequest.findMany({
-          where: { status: 'PENDING' },
+          where,
           orderBy: { createdAt: 'desc' },
           include: {
             article: true,
@@ -1944,7 +2014,16 @@ export const schema = createSchema({
         if (id) {
           existingArticle = await db.article.findUnique({
             where: { id },
-            select: { id: true, authorId: true, status: true, title: true },
+            select: {
+              id: true,
+              authorId: true,
+              status: true,
+              title: true,
+              isFeatured: true,
+              isEditorsPick: true,
+              isBreaking: true,
+              authorEditAllowance: true,
+            },
           });
 
           if (!existingArticle) {
@@ -1974,12 +2053,22 @@ export const schema = createSchema({
           // Check if user can modify article features (featured, breaking, editor's pick)
           // Only check if user is trying to ENABLE features, not just sending the fields
           const hasFeatureChanges =
-            data.isFeatured === true || data.isEditorsPick === true || data.isBreaking === true;
+            (data.isFeatured === true && !existingArticle.isFeatured) ||
+            (data.isEditorsPick === true && !existingArticle.isEditorsPick) ||
+            (data.isBreaking === true && !existingArticle.isBreaking);
 
           if (hasFeatureChanges && !PermissionService.canSetArticleFeatures(userRole)) {
             throw new Error(
               "Permission denied: You cannot set article features (featured, breaking news, editor's pick)"
             );
+          }
+
+          if (userRole === 'AUTHOR' && existingArticle.status === 'PUBLISHED') {
+            if (!existingArticle.authorEditAllowance || existingArticle.authorEditAllowance < 1) {
+              throw new Error(
+                'Permission denied: Please request a revision to edit this article again'
+              );
+            }
           }
 
           // Check if user can change article status
@@ -2069,8 +2158,6 @@ export const schema = createSchema({
           pinnedAt: data.pinnedAt ? new Date(data.pinnedAt) : null,
 
           authorName: data.authorName ?? context.user.name,
-          // Set authorId if the relationship exists in the schema
-          ...(context.user.id && { authorId: context.user.id }),
           coverImageUrl: data.coverImageUrl ?? null,
 
           seoTitle: data.seoTitle ?? null,
@@ -2079,6 +2166,15 @@ export const schema = createSchema({
 
           categoryId: category?.id ?? null,
         };
+
+        if (
+          existingArticle &&
+          userRole === 'AUTHOR' &&
+          existingArticle.status === 'PUBLISHED' &&
+          existingArticle.authorEditAllowance
+        ) {
+          payload.authorEditAllowance = Math.max(0, existingArticle.authorEditAllowance - 1);
+        }
 
         if (includeBreaking) {
           payload.isBreaking = data.isBreaking ?? false;
@@ -2094,6 +2190,28 @@ export const schema = createSchema({
             data: payload,
             select,
           });
+
+          if (userRole === 'AUTHOR') {
+            const latestRequest = await db.articleRevisionRequest.findFirst({
+              where: {
+                articleId: article.id,
+                consumedAt: null,
+                status: { in: ['APPROVED', 'REJECTED'] },
+              },
+              orderBy: [{ reviewedAt: 'desc' }, { createdAt: 'desc' }],
+              select: { id: true },
+            });
+
+            if (latestRequest) {
+              await db.articleRevisionRequest.update({
+                where: { id: latestRequest.id },
+                data: {
+                  consumedAt: new Date(),
+                  consumedById: context.user!.id,
+                },
+              });
+            }
+          }
         } else {
           // create OR update by slug (new page / retry-safe)
           const existing = await db.article.findUnique({
@@ -2107,10 +2225,33 @@ export const schema = createSchema({
               data: payload,
               select,
             });
+
+            if (userRole === 'AUTHOR') {
+              const latestRequest = await db.articleRevisionRequest.findFirst({
+                where: {
+                  articleId: existing.id,
+                  consumedAt: null,
+                  status: { in: ['APPROVED', 'REJECTED'] },
+                },
+                orderBy: [{ reviewedAt: 'desc' }, { createdAt: 'desc' }],
+                select: { id: true },
+              });
+
+              if (latestRequest) {
+                await db.articleRevisionRequest.update({
+                  where: { id: latestRequest.id },
+                  data: {
+                    consumedAt: new Date(),
+                    consumedById: context.user!.id,
+                  },
+                });
+              }
+            }
           } else {
             article = await db.article.create({
               data: {
                 ...payload,
+                authorId: context.user.id,
                 publishedAt: status === 'PUBLISHED' ? new Date() : null,
               },
               select,
@@ -2667,8 +2808,8 @@ export const schema = createSchema({
           throw new Error('Article not found');
         }
 
-        if (article.status !== 'PUBLISHED') {
-          throw new Error('Only published articles can be revised');
+        if (article.status !== 'REVIEW') {
+          throw new Error('Only articles in review can be revised');
         }
 
         const userRole = context.user!.role as any;
@@ -2774,7 +2915,7 @@ export const schema = createSchema({
               select: { id: true },
             });
             if (!category) {
-              throw new Error(`Invalid category \"${changes.categorySlug}\"`);
+              throw new Error(`Invalid category "${changes.categorySlug}"`);
             }
             categoryId = category.id;
           } else {
@@ -2785,6 +2926,7 @@ export const schema = createSchema({
         const payload: any = {
           revisionStatus: 'NONE',
           revisionRequestedAt: null,
+          authorEditAllowance: 1,
         };
 
         if (normalizedChanges.title !== undefined) payload.title = normalizedChanges.title;
@@ -2941,6 +3083,56 @@ export const schema = createSchema({
         return updatedRequest;
       },
 
+      consumeArticleRevision: async (
+        _: unknown,
+        { requestId }: { requestId: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+        const { PermissionService, Permission } = await import('../services/permissionService');
+
+        const request = await db.articleRevisionRequest.findUnique({
+          where: { id: requestId },
+          include: {
+            article: true,
+            requester: true,
+            reviewedBy: true,
+            consumedBy: true,
+          },
+        });
+
+        if (!request) {
+          throw new Error('Revision request not found');
+        }
+
+        const userRole = context.user!.role as any;
+        const isOwner = request.article.authorId === context.user!.id;
+
+        if (!isOwner && !PermissionService.hasPermission(userRole, Permission.UPDATE_ANY_ARTICLE)) {
+          throw new Error('Permission denied: You cannot consume this revision request');
+        }
+
+        if (request.consumedAt) return request;
+
+        if (request.status !== 'APPROVED' && request.status !== 'REJECTED') {
+          throw new Error('Only approved or rejected revision requests can be consumed');
+        }
+
+        return db.articleRevisionRequest.update({
+          where: { id: requestId },
+          data: {
+            consumedAt: new Date(),
+            consumedById: context.user!.id,
+          },
+          include: {
+            article: true,
+            requester: true,
+            reviewedBy: true,
+            consumedBy: true,
+          },
+        });
+      },
+
       requestBreakingNews: async (
         _: unknown,
         { articleId, reason }: { articleId: string; reason?: string },
@@ -2964,10 +3156,6 @@ export const schema = createSchema({
 
         if (!article) {
           throw new Error('Article not found');
-        }
-
-        if (article.status !== 'PUBLISHED') {
-          throw new Error('Only published articles can be marked as breaking news');
         }
 
         if (article.isBreaking) {
@@ -3008,6 +3196,15 @@ export const schema = createSchema({
             article: true,
             requester: true,
             reviewedBy: true,
+          },
+        });
+
+        await db.article.update({
+          where: { id: article.id },
+          data: {
+            breakingNewsRequestStatus: 'PENDING',
+            breakingNewsRequestedAt: new Date(),
+            breakingNewsRequestedById: context.user!.id,
           },
         });
 
@@ -3055,18 +3252,16 @@ export const schema = createSchema({
           throw new Error('Breaking news feature is not available');
         }
 
-        const select = await getArticleSelect();
-
-        const updatedArticle = await db.$transaction(async (tx: Prisma.TransactionClient) => {
-          const article = await tx.article.update({
+        const updatedRequest = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+          await tx.article.update({
             where: { id: request.articleId },
             data: {
               isBreaking: true,
+              breakingNewsRequestStatus: 'APPROVED',
             },
-            select,
           });
 
-          await tx.breakingNewsRequest.update({
+          return tx.breakingNewsRequest.update({
             where: { id: requestId },
             data: {
               status: 'APPROVED',
@@ -3074,9 +3269,12 @@ export const schema = createSchema({
               reviewedAt: new Date(),
               reviewComment: reviewComment ?? null,
             },
+            include: {
+              article: true,
+              requester: true,
+              reviewedBy: true,
+            },
           });
-
-          return article;
         });
 
         await AuditService.logArticleEvent(
@@ -3090,7 +3288,7 @@ export const schema = createSchema({
           context.request
         );
 
-        return updatedArticle;
+        return updatedRequest;
       },
 
       rejectBreakingNews: async (
@@ -3128,6 +3326,13 @@ export const schema = createSchema({
             article: true,
             requester: true,
             reviewedBy: true,
+          },
+        });
+
+        await db.article.update({
+          where: { id: request.articleId },
+          data: {
+            breakingNewsRequestStatus: 'REJECTED',
           },
         });
 

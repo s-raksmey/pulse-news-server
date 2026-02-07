@@ -1,0 +1,1 @@
+ALTER TABLE "Article" ADD COLUMN "authorEditAllowance" INTEGER NOT NULL DEFAULT 0;
