@@ -118,6 +118,101 @@ function normalizeRevisionChanges(changes: z.infer<typeof RevisionChangesInput>)
   };
 }
 
+type RevisionNotificationAction =
+  | 'REVISION_REQUESTED'
+  | 'REVISION_APPROVED'
+  | 'REVISION_REJECTED'
+  | 'REVISION_CONSUMED';
+
+type RevisionNotificationParams = {
+  action: RevisionNotificationAction;
+  articleId: string;
+  articleTitle: string;
+  requestId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  performedById: string;
+  requesterId?: string | null;
+  reviewerId?: string | null;
+  consumedById?: string | null;
+  authorId?: string | null;
+  note?: string | null;
+  reviewComment?: string | null;
+  message?: string | null;
+};
+
+function getRevisionNotificationTitle(action: RevisionNotificationAction, articleTitle: string) {
+  switch (action) {
+    case 'REVISION_REQUESTED':
+      return `Revision requested: ${articleTitle}`;
+    case 'REVISION_APPROVED':
+      return `Revision approved: ${articleTitle}`;
+    case 'REVISION_REJECTED':
+      return `Revision rejected: ${articleTitle}`;
+    case 'REVISION_CONSUMED':
+      return `Revision request completed: ${articleTitle}`;
+    default:
+      return `Revision update: ${articleTitle}`;
+  }
+}
+
+async function sendRevisionNotifications(params: RevisionNotificationParams): Promise<void> {
+  const { NotificationService } = await import('../services/notificationService');
+
+  const directIds = new Set<string>();
+  if (params.authorId) directIds.add(params.authorId);
+  if (params.requesterId) directIds.add(params.requesterId);
+  if (params.reviewerId) directIds.add(params.reviewerId);
+  if (params.consumedById) directIds.add(params.consumedById);
+
+  const [directUsers, adminEditors] = await Promise.all([
+    directIds.size
+      ? db.user.findMany({
+          where: { id: { in: Array.from(directIds) } },
+          select: { id: true, email: true, name: true },
+        })
+      : [],
+    db.user.findMany({
+      where: {
+        role: { in: ['ADMIN', 'EDITOR'] },
+        isActive: true,
+      },
+      select: { id: true, email: true, name: true },
+    }),
+  ]);
+
+  const recipientMap = new Map<string, { id: string; email?: string | null; name?: string | null }>();
+  for (const user of directUsers) recipientMap.set(user.id, user);
+  for (const user of adminEditors) recipientMap.set(user.id, user);
+
+  if (recipientMap.size === 0) return;
+
+  const metadata = {
+    action: params.action,
+    articleTitle: params.articleTitle,
+    requestId: params.requestId,
+    requestStatus: params.status,
+    requesterId: params.requesterId ?? undefined,
+    reviewerId: params.reviewerId ?? undefined,
+    consumedById: params.consumedById ?? undefined,
+    note: params.note ?? undefined,
+    reviewComment: params.reviewComment ?? undefined,
+  };
+
+  const notifications = Array.from(recipientMap.values()).map((recipient) => ({
+    type: params.action,
+    title: getRevisionNotificationTitle(params.action, params.articleTitle),
+    message: params.message ?? undefined,
+    metadata,
+    articleId: params.articleId,
+    fromUserId: params.performedById,
+    toUserId: recipient.id,
+    toUserEmail: recipient.email ?? undefined,
+    toUserName: recipient.name ?? undefined,
+  }));
+
+  await NotificationService.createAndDispatch(notifications);
+}
+
 let breakingColumnAvailable: boolean | null = null;
 
 async function hasBreakingColumn(): Promise<boolean> {
@@ -459,6 +554,42 @@ export const schema = createSchema({
       description: String!
     }
 
+    enum NotificationType {
+      SUBMISSION
+      APPROVAL
+      REJECTION
+      PUBLICATION
+      UNPUBLICATION
+      ARCHIVE
+      DRAFT_SAVED
+      REVISION_REQUESTED
+      REVISION_APPROVED
+      REVISION_REJECTED
+      REVISION_CONSUMED
+    }
+
+    type Notification {
+      id: ID!
+      type: NotificationType!
+      title: String!
+      message: String
+      metadata: JSON
+      articleId: String
+      fromUserId: String
+      fromUser: User
+      toUserId: String!
+      isRead: Boolean!
+      readAt: String
+      createdAt: String!
+      updatedAt: String!
+    }
+
+    type NotificationConnection {
+      notifications: [Notification!]!
+      totalCount: Int!
+      hasMore: Boolean!
+    }
+
     # Audit Log Types
     type AuditLog {
       id: ID!
@@ -628,6 +759,14 @@ export const schema = createSchema({
       getPermissionSummary(role: UserRole!): PermissionSummary!
       getAvailableWorkflowActions(articleId: ID!): [WorkflowAction!]!
 
+      # Notification queries
+      myNotifications(
+        limit: Int = 20
+        offset: Int = 0
+        unreadOnly: Boolean = false
+      ): NotificationConnection!
+      unreadNotificationCount: Int!
+
       # Revision workflow queries
       revisionRequests(articleId: ID!, status: RevisionRequestStatus): [ArticleRevisionRequest!]!
       articleRevisionHistory(articleId: ID!, limit: Int = 20, skip: Int = 0): [ArticleRevision!]!
@@ -681,6 +820,10 @@ export const schema = createSchema({
       # Workflow mutations
       performWorkflowAction(input: WorkflowActionInput!): WorkflowActionResult!
       performBulkWorkflowAction(input: BulkWorkflowActionInput!): BulkWorkflowActionResult!
+
+      # Notification mutations
+      markNotificationRead(id: ID!): Notification!
+      markAllNotificationsRead: Int!
 
       # Revision workflow mutations
       requestArticleRevision(input: RequestArticleRevisionInput!): ArticleRevisionRequest!
@@ -979,6 +1122,19 @@ export const schema = createSchema({
     Setting: {
       createdAt: (p: any) => toIso(p.createdAt),
       updatedAt: (p: any) => toIso(p.updatedAt),
+    },
+
+    Notification: {
+      createdAt: (p: any) => toIso(p.createdAt),
+      updatedAt: (p: any) => toIso(p.updatedAt),
+      readAt: (p: any) => toIso(p.readAt),
+      fromUser: async (p: any) => {
+        if (!p.fromUserId) return null;
+        return db.user.findUnique({
+          where: { id: p.fromUserId },
+          select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+        });
+      },
     },
 
     AuditLog: {
@@ -1791,6 +1947,53 @@ export const schema = createSchema({
         return PermissionService.getAvailableWorkflowActions(userRole, article.status, isOwner);
       },
 
+      myNotifications: async (
+        _: unknown,
+        {
+          limit,
+          offset,
+          unreadOnly,
+        }: { limit?: number; offset?: number; unreadOnly?: boolean },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+
+        const where: any = {
+          toUserId: context.user!.id,
+        };
+
+        if (unreadOnly) {
+          where.isRead = false;
+        }
+
+        const [notifications, totalCount] = await Promise.all([
+          db.notification.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: limit ?? 20,
+            skip: offset ?? 0,
+          }),
+          db.notification.count({ where }),
+        ]);
+
+        return {
+          notifications,
+          totalCount,
+          hasMore: (offset ?? 0) + notifications.length < totalCount,
+        };
+      },
+
+      unreadNotificationCount: async (_: unknown, __: unknown, context: GraphQLContext) => {
+        requireAuth(context);
+
+        return db.notification.count({
+          where: {
+            toUserId: context.user!.id,
+            isRead: false,
+          },
+        });
+      },
+
       revisionRequests: async (
         _: unknown,
         { articleId, status }: { articleId: string; status?: string },
@@ -2073,6 +2276,9 @@ export const schema = createSchema({
 
           // Check if user can change article status
           if (data.status && data.status !== existingArticle.status) {
+            if (data.status === 'PUBLISHED') {
+              throw new Error('Use performWorkflowAction with APPROVE to publish articles');
+            }
             if (
               !PermissionService.canPerformWorkflowAction(
                 userRole,
@@ -2105,6 +2311,10 @@ export const schema = createSchema({
             throw new Error(
               "Permission denied: You cannot set article features (featured, breaking news, editor's pick)"
             );
+          }
+
+          if (data.status === 'PUBLISHED') {
+            throw new Error('Create drafts or review articles, then use APPROVE to publish');
           }
 
           // Authors can only create drafts or submit for review
@@ -2314,7 +2524,7 @@ export const schema = createSchema({
 
         // Require editor permissions for publishing articles
         if (status === 'PUBLISHED') {
-          requireEditor(context);
+          throw new Error('Use performWorkflowAction with APPROVE to publish articles');
         }
 
         return db.article.update({
@@ -2782,6 +2992,51 @@ export const schema = createSchema({
         return await ArticleWorkflowService.performBulkWorkflowAction(context, input);
       },
 
+      markNotificationRead: async (
+        _: unknown,
+        { id }: { id: string },
+        context: GraphQLContext
+      ) => {
+        requireAuth(context);
+
+        const notification = await db.notification.findUnique({
+          where: { id },
+        });
+
+        if (!notification) {
+          throw new Error('Notification not found');
+        }
+
+        if (notification.toUserId !== context.user!.id) {
+          throw new Error('Unauthorized to read this notification');
+        }
+
+        return db.notification.update({
+          where: { id },
+          data: {
+            isRead: true,
+            readAt: new Date(),
+          },
+        });
+      },
+
+      markAllNotificationsRead: async (_: unknown, __: unknown, context: GraphQLContext) => {
+        requireAuth(context);
+
+        const result = await db.notification.updateMany({
+          where: {
+            toUserId: context.user!.id,
+            isRead: false,
+          },
+          data: {
+            isRead: true,
+            readAt: new Date(),
+          },
+        });
+
+        return result.count;
+      },
+
       requestArticleRevision: async (
         _: unknown,
         { input }: { input: any },
@@ -2875,6 +3130,19 @@ export const schema = createSchema({
           context.request
         );
 
+        await sendRevisionNotifications({
+          action: 'REVISION_REQUESTED',
+          articleId: article.id,
+          articleTitle: article.title,
+          requestId: request.id,
+          status: 'PENDING',
+          performedById: context.user!.id,
+          requesterId: request.requesterId ?? context.user!.id,
+          authorId: article.authorId,
+          note: data.note ?? null,
+          message: data.note ?? undefined,
+        });
+
         return request;
       },
 
@@ -2890,8 +3158,20 @@ export const schema = createSchema({
 
         const request = await db.articleRevisionRequest.findUnique({
           where: { id: requestId },
-          include: {
-            article: true,
+          select: {
+            id: true,
+            status: true,
+            articleId: true,
+            proposedChanges: true,
+            note: true,
+            requesterId: true,
+            article: {
+              select: {
+                id: true,
+                title: true,
+                authorId: true,
+              },
+            },
           },
         });
 
@@ -3016,6 +3296,20 @@ export const schema = createSchema({
           context.request
         );
 
+        await sendRevisionNotifications({
+          action: 'REVISION_APPROVED',
+          articleId: request.articleId,
+          articleTitle: request.article.title,
+          requestId,
+          status: 'APPROVED',
+          performedById: context.user!.id,
+          requesterId: request.requesterId,
+          reviewerId: context.user!.id,
+          authorId: request.article.authorId,
+          reviewComment: reviewComment ?? null,
+          message: reviewComment ?? undefined,
+        });
+
         return updatedArticle;
       },
 
@@ -3031,7 +3325,19 @@ export const schema = createSchema({
 
         const request = await db.articleRevisionRequest.findUnique({
           where: { id: requestId },
-          select: { id: true, articleId: true, status: true },
+          select: {
+            id: true,
+            articleId: true,
+            status: true,
+            requesterId: true,
+            article: {
+              select: {
+                id: true,
+                title: true,
+                authorId: true,
+              },
+            },
+          },
         });
 
         if (!request) {
@@ -3080,6 +3386,20 @@ export const schema = createSchema({
           context.request
         );
 
+        await sendRevisionNotifications({
+          action: 'REVISION_REJECTED',
+          articleId: request.articleId,
+          articleTitle: request.article.title,
+          requestId,
+          status: 'REJECTED',
+          performedById: context.user!.id,
+          requesterId: request.requesterId,
+          reviewerId: context.user!.id,
+          authorId: request.article.authorId,
+          reviewComment: reviewComment ?? null,
+          message: reviewComment ?? undefined,
+        });
+
         return updatedRequest;
       },
 
@@ -3118,7 +3438,7 @@ export const schema = createSchema({
           throw new Error('Only approved or rejected revision requests can be consumed');
         }
 
-        return db.articleRevisionRequest.update({
+        const updatedRequest = await db.articleRevisionRequest.update({
           where: { id: requestId },
           data: {
             consumedAt: new Date(),
@@ -3131,6 +3451,21 @@ export const schema = createSchema({
             consumedBy: true,
           },
         });
+
+        await sendRevisionNotifications({
+          action: 'REVISION_CONSUMED',
+          articleId: updatedRequest.articleId,
+          articleTitle: updatedRequest.article.title,
+          requestId,
+          status: updatedRequest.status,
+          performedById: context.user!.id,
+          requesterId: updatedRequest.requesterId,
+          reviewerId: updatedRequest.reviewedById,
+          consumedById: updatedRequest.consumedById,
+          authorId: updatedRequest.article.authorId,
+        });
+
+        return updatedRequest;
       },
 
       requestBreakingNews: async (

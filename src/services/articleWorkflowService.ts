@@ -1,9 +1,10 @@
 // src/services/articleWorkflowService.ts
 import { prisma } from '../lib/prisma';
-import { UserRole, ArticleStatus } from '@prisma/client';
+import { UserRole, ArticleStatus, NotificationType } from '@prisma/client';
 import { GraphQLContext } from '../middleware/auth';
 import { PermissionService, Permission } from './permissionService';
 import { AuditService, AuditEventType } from './auditService';
+import { NotificationService } from './notificationService';
 import { z } from 'zod';
 
 /**
@@ -33,11 +34,13 @@ const VALID_TRANSITIONS: Record<ArticleStatus, ArticleStatus[]> = {
  * Workflow notification types
  */
 export interface WorkflowNotification {
-  type: 'SUBMISSION' | 'APPROVAL' | 'REJECTION' | 'PUBLICATION';
+  id: string;
+  type: NotificationType;
+  title: string;
   articleId: string;
   articleTitle: string;
-  fromUserId: string;
-  toUserId?: string;
+  fromUserId?: string;
+  toUserId: string;
   message?: string;
   timestamp: Date;
 }
@@ -78,6 +81,10 @@ export class ArticleWorkflowService {
     try {
       const validatedInput = WorkflowActionInput.parse(input);
       const { articleId, action, reason, notifyAuthor } = validatedInput;
+
+      if (action === WorkflowAction.PUBLISH) {
+        throw new Error('Use APPROVE to publish articles');
+      }
 
       if (!context.user) {
         throw new Error('Authentication required');
@@ -476,43 +483,131 @@ export class ArticleWorkflowService {
     notifyAuthor: boolean,
     reason?: string
   ): Promise<WorkflowNotification[]> {
-    const notifications: WorkflowNotification[] = [];
+    const notificationType = this.getNotificationType(action);
+    if (!notificationType) return [];
 
-    if (!notifyAuthor || !article.authorId || article.authorId === performedByUserId) {
-      return notifications;
+    const title = this.getNotificationTitle(action, article.title);
+    const metadata = {
+      action,
+      articleTitle: article.title,
+    };
+
+    if (action === WorkflowAction.SUBMIT_FOR_REVIEW) {
+      const reviewers = await prisma.user.findMany({
+        where: {
+          role: { in: [UserRole.ADMIN, UserRole.EDITOR] },
+          isActive: true,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      });
+
+      const reviewerTargets = reviewers.filter((reviewer) => reviewer.id !== performedByUserId);
+      if (reviewerTargets.length === 0) return [];
+
+      const created = await NotificationService.createAndDispatch(
+        reviewerTargets.map((reviewer) => ({
+          type: notificationType,
+          title,
+          message: reason,
+          metadata,
+          articleId: article.id,
+          fromUserId: performedByUserId,
+          toUserId: reviewer.id,
+          toUserEmail: reviewer.email,
+          toUserName: reviewer.name,
+        }))
+      );
+
+      return created.map((notification) => ({
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        articleId: notification.articleId || article.id,
+        articleTitle: article.title,
+        fromUserId: notification.fromUserId || undefined,
+        toUserId: notification.toUserId,
+        message: notification.message || undefined,
+        timestamp: notification.createdAt,
+      }));
     }
 
-    const notificationType = this.getNotificationType(action);
-    if (!notificationType) return notifications;
+    if (!notifyAuthor || !article.authorId || article.authorId === performedByUserId) {
+      return [];
+    }
 
-    notifications.push({
-      type: notificationType,
-      articleId: article.id,
+    const authorEmail = article.author?.email || undefined;
+    const authorName = article.author?.name || undefined;
+
+    const created = await NotificationService.createAndDispatch([
+      {
+        type: notificationType,
+        title,
+        message: reason,
+        metadata,
+        articleId: article.id,
+        fromUserId: performedByUserId,
+        toUserId: article.authorId,
+        toUserEmail: authorEmail,
+        toUserName: authorName,
+      },
+    ]);
+
+    return created.map((notification) => ({
+      id: notification.id,
+      type: notification.type,
+      title: notification.title,
+      articleId: notification.articleId || article.id,
       articleTitle: article.title,
-      fromUserId: performedByUserId,
-      toUserId: article.authorId,
-      message: reason,
-      timestamp: new Date(),
-    });
-
-    // TODO: Send actual notifications (email, in-app, etc.)
-    console.log('Generated workflow notification:', notifications[0]);
-
-    return notifications;
+      fromUserId: notification.fromUserId || undefined,
+      toUserId: notification.toUserId,
+      message: notification.message || undefined,
+      timestamp: notification.createdAt,
+    }));
   }
 
-  private static getNotificationType(action: WorkflowAction): WorkflowNotification['type'] | null {
+  private static getNotificationType(action: WorkflowAction): NotificationType | null {
     switch (action) {
       case WorkflowAction.SUBMIT_FOR_REVIEW:
-        return 'SUBMISSION';
+        return NotificationType.SUBMISSION;
       case WorkflowAction.APPROVE:
-        return 'APPROVAL';
+        return NotificationType.APPROVAL;
       case WorkflowAction.REJECT:
-        return 'REJECTION';
+        return NotificationType.REJECTION;
       case WorkflowAction.PUBLISH:
-        return 'PUBLICATION';
+        return NotificationType.PUBLICATION;
+      case WorkflowAction.UNPUBLISH:
+        return NotificationType.UNPUBLICATION;
+      case WorkflowAction.ARCHIVE:
+        return NotificationType.ARCHIVE;
+      case WorkflowAction.SAVE_DRAFT:
+        return NotificationType.DRAFT_SAVED;
       default:
         return null;
+    }
+  }
+
+  private static getNotificationTitle(action: WorkflowAction, articleTitle: string): string {
+    switch (action) {
+      case WorkflowAction.SAVE_DRAFT:
+        return `Draft saved: ${articleTitle}`;
+      case WorkflowAction.SUBMIT_FOR_REVIEW:
+        return `Article submitted for review: ${articleTitle}`;
+      case WorkflowAction.APPROVE:
+        return `Article approved: ${articleTitle}`;
+      case WorkflowAction.REJECT:
+        return `Article rejected: ${articleTitle}`;
+      case WorkflowAction.PUBLISH:
+        return `Article published: ${articleTitle}`;
+      case WorkflowAction.UNPUBLISH:
+        return `Article unpublished: ${articleTitle}`;
+      case WorkflowAction.ARCHIVE:
+        return `Article archived: ${articleTitle}`;
+      default:
+        return `Article updated: ${articleTitle}`;
     }
   }
 
