@@ -731,6 +731,7 @@ export const schema = createSchema({
 
       articleBySlug(slug: String!): Article
       articleById(id: ID!): Article
+      articlesByTopic(categorySlug: String!, topicSlug: String!): [Article!]!
 
       topStories(limit: Int = 6): [Article!]!
       editorsPicks(limit: Int = 6): [Article!]!
@@ -1504,6 +1505,20 @@ export const schema = createSchema({
 
         return db.article.findUnique({
           where: { id },
+          select,
+        });
+      },
+
+      articlesByTopic: async (_: unknown, { categorySlug, topicSlug }: { categorySlug: string; topicSlug: string }) => {
+        const select = await getArticleSelect();
+
+        return db.article.findMany({
+          where: {
+            status: 'PUBLISHED', // Only show published articles
+            category: { is: { slug: categorySlug } },
+            topic: { equals: topicSlug, mode: "insensitive" },
+          },
+          orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
           select,
         });
       },
