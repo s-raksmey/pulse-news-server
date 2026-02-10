@@ -79,7 +79,7 @@ export class NotificationService {
               message: notification.message,
               metadata: notification.metadata ?? undefined,
               articleId: notification.articleId,
-              fromUserId: notification.fromUserId,
+              ...(notification.fromUserId ? { fromUserId: notification.fromUserId } : {}),
               toUserId: notification.toUserId,
             },
           })

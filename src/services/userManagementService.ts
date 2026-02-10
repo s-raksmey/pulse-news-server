@@ -894,7 +894,7 @@ export async function getUserStats(): Promise<UserStats> {
 export async function getUserActivity(userId?: string, limit: number = 50): Promise<ActivityLog[]> {
   try {
     const where = userId ? { userId } : {};
-    const activities = await prisma.ActivityLog.findMany({
+    const activities = await prisma.activityLog.findMany({
       where,
       take: limit,
       orderBy: { timestamp: 'desc' },
