@@ -304,8 +304,36 @@ async function getArticleSelect() {
 /* =========================
    GraphQL Schema
 ========================= */
+// Account Request Types
+// Removed unused AccountRequestStatus and AccountRequestGraphQL to fix TS errors
+// Removed unused AccountRequestStatus and AccountRequestGraphQL to fix TS errors
+
 export const schema = createSchema({
   typeDefs: /* GraphQL */ `
+      type AccountRequest {
+        id: ID!
+        email: String!
+        requesterName: String!
+        requestedRole: UserRole!
+        status: String!
+        customMessage: String
+        createdAt: String!
+        updatedAt: String!
+        userId: String
+      }
+
+      input AccountRequestInput {
+        email: String!
+        requesterName: String!
+        requestedRole: UserRole!
+      }
+
+      type AccountRequestResult {
+        success: Boolean!
+        message: String!
+        request: AccountRequest
+      }
+
     scalar JSON
 
     enum ArticleStatus {
@@ -712,6 +740,7 @@ export const schema = createSchema({
     }
 
     type Query {
+        accountRequests(status: String): [AccountRequest!]!
       # Authentication queries
       me: AuthResponse!
       debugAuth: DebugAuthResponse!
@@ -789,6 +818,10 @@ export const schema = createSchema({
     }
 
     type Mutation {
+        submitAccountRequest(input: AccountRequestInput!): AccountRequestResult!
+        approveAccountRequest(id: ID!, customMessage: String): AccountRequestResult!
+        rejectAccountRequest(id: ID!, customMessage: String): AccountRequestResult!
+        verifyAccountRequest(id: ID!, code: String!): AccountRequestResult!
       # Authentication mutations
       register(input: RegisterInput!): AuthResponse!
       login(input: LoginInput!): AuthResponse!
@@ -1105,6 +1138,10 @@ export const schema = createSchema({
   `,
 
   resolvers: {
+        AccountRequest: {
+          createdAt: (p: any) => toIso(p.createdAt),
+          updatedAt: (p: any) => toIso(p.updatedAt),
+        },
     JSON: GraphQLJSONObject,
 
     Category: {
@@ -1351,6 +1388,14 @@ export const schema = createSchema({
     },
 
     Query: {
+            accountRequests: async (_: unknown, { status }: { status?: string }, context: GraphQLContext) => {
+              requireAuth(context);
+              requireAdmin(context);
+              return db.accountRequest.findMany({
+                where: status ? { status } : {},
+                orderBy: { createdAt: 'desc' },
+              });
+            },
       me: async (_: unknown, __: unknown, context: GraphQLContext) => {
         if (!context.user) {
           return {
@@ -2207,6 +2252,125 @@ export const schema = createSchema({
     },
 
     Mutation: {
+            submitAccountRequest: async (_: unknown, { input }: any) => {
+              const { AccountRequestInput } = await import('../services/userManagementService');
+              const parsed = AccountRequestInput.parse(input);
+              const existing = await db.accountRequest.findFirst({ where: { email: parsed.email, status: { in: ['pending', 'awaiting_verification'] } } });
+              if (existing) {
+                return { success: false, message: 'Request already exists or pending', request: existing };
+              }
+              const request = await db.accountRequest.create({
+                data: { ...parsed, status: 'pending' },
+              });
+              // Send notification to admins
+              const admins = await db.user.findMany({ where: { role: 'ADMIN', isActive: true } });
+              const { NotificationService } = await import('../services/notificationService');
+              await NotificationService.createAndDispatch(admins.map((admin: any) => ({
+                type: 'SUBMISSION',
+                title: 'New Account Request',
+                message: `${parsed.requesterName} requested ${parsed.requestedRole} role.`,
+                fromUserId: '',
+                toUserId: admin.id
+              })));
+              return { success: true, message: 'Account request submitted', request };
+            },
+
+            approveAccountRequest: async (_: unknown, { id, customMessage }: any, context: GraphQLContext) => {
+              requireAuth(context);
+              requireAdmin(context);
+              const request = await db.accountRequest.update({
+                where: { id },
+                data: { status: 'awaiting_verification', customMessage },
+              });
+              // Send verification email to requester
+              const { EmailService } = await import('../services/emailService');
+              const verificationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+              await db.accountRequest.update({ where: { id }, data: { customMessage, status: 'awaiting_verification', verificationCode } });
+              await EmailService.sendNotificationEmail({
+                to: request.email,
+                subject: 'Pulse News Account Verification',
+                text: `Your account request was approved. ${customMessage || ''}\nVerification code: ${verificationCode}`,
+                html: `<h2>Pulse News Account Verification</h2><p>Your account request was approved.</p><p>${customMessage || ''}</p><p><b>Verification code:</b> ${verificationCode}</p>`,
+              });
+              // In-app notification
+              const { NotificationService } = await import('../services/notificationService');
+              await NotificationService.createAndDispatch([{
+                type: 'APPROVAL',
+                title: 'Account Request Approved',
+                message: customMessage || '',
+                fromUserId: context.user.id,
+                toUserId: request.userId ? request.userId : ''
+              }]);
+              return { success: true, message: 'Account request approved', request };
+            },
+
+            rejectAccountRequest: async (_: unknown, { id, customMessage }: any, context: GraphQLContext) => {
+              requireAuth(context);
+              requireAdmin(context);
+              const request = await db.accountRequest.update({
+                where: { id },
+                data: { status: 'rejected', customMessage },
+              });
+              // Send rejection notification to requester
+              const { EmailService } = await import('../services/emailService');
+              await EmailService.sendNotificationEmail({
+                to: request.email,
+                subject: 'Pulse News Account Request Rejected',
+                text: `Your account request was rejected. ${customMessage || ''}`,
+                html: `<h2>Pulse News Account Request Rejected</h2><p>Your account request was rejected.</p><p>${customMessage || ''}</p>`,
+              });
+              const { NotificationService } = await import('../services/notificationService');
+              await NotificationService.createAndDispatch([{
+                type: 'REJECTION',
+                title: 'Account Request Rejected',
+                message: customMessage || '',
+                fromUserId: context.user.id,
+                toUserId: request.userId ? request.userId : ''
+              }]);
+              return { success: true, message: 'Account request rejected', request };
+            },
+
+            verifyAccountRequest: async (_: unknown, { id, code }: any) => {
+              // TODO: Securely verify code, activate user, send congratulations notification
+              const request = await db.accountRequest.findUnique({ where: { id } });
+              if (!request || request.status !== 'awaiting_verification') {
+                return { success: false, message: 'Invalid or expired verification', request };
+              }
+              // Validate code
+              if (request.verificationCode !== code) {
+                return { success: false, message: 'Invalid verification code', request };
+              }
+              // Activate user account
+              const user = await db.user.create({
+                data: {
+                  email: request.email,
+                  name: request.requesterName,
+                  role: request.requestedRole,
+                  isActive: true,
+                },
+              });
+              await db.accountRequest.update({
+                where: { id },
+                data: { status: 'active', userId: user.id },
+              });
+              // Send congratulations notification
+              const { EmailService } = await import('../services/emailService');
+              await EmailService.sendNotificationEmail({
+                to: request.email,
+                subject: 'Pulse News Account Activated',
+                text: 'Congratulations! Your account is now active.',
+                html: '<h2>Congratulations!</h2><p>Your Pulse News account is now active.</p>',
+              });
+              const { NotificationService } = await import('../services/notificationService');
+              await NotificationService.createAndDispatch([{
+                type: 'APPROVAL',
+                title: 'Account Activated',
+                message: 'Congratulations! Your account is now active.',
+                fromUserId: '',
+                toUserId: user.id
+              }]);
+              return { success: true, message: 'Account verified and activated', request };
+            },
       register: async (_: unknown, { input }: any, context: GraphQLContext) => {
         return registerUser(input, context.request);
       },

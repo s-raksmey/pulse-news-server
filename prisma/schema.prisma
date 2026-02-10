@@ -76,6 +76,8 @@ model User {
   name      String
   role      UserRole @default(AUTHOR)
   isActive  Boolean  @default(true)
+  resetToken String?
+  resetTokenExpiry DateTime?
 
   articles  Article[]
   revisionRequests        ArticleRevisionRequest[] @relation("RevisionRequester")
@@ -89,8 +91,21 @@ model User {
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsSent     Notification[] @relation("NotificationSender")
 
+  activityLogs ActivityLog[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model ActivityLog {
+  id            String   @id @default(cuid())
+  userId        String
+  activityType  String
+  details       Json?
+  performedBy   String
+  timestamp     DateTime @default(now())
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Category {
@@ -103,6 +118,17 @@ model Category {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+model AccountRequest {
+  id              String   @id @default(uuid())
+  email           String
+  requesterName   String
+  requestedRole   String
+  status          String   // pending, approved, rejected, awaiting_verification, active
+  customMessage   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  userId          String?  // Link to User after activation
 }
 
 model Topic {

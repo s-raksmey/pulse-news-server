@@ -6,12 +6,23 @@ import { z } from 'zod';
 
 // ============================================================================
 // TYPES AND INTERFACES
+export interface AccountRequest {
+  id: string;
+  email: string;
+  requesterName: string;
+  requestedRole: 'ADMIN' | 'EDITOR' | 'AUTHOR';
+  status: 'pending' | 'approved' | 'rejected' | 'awaiting_verification' | 'active';
+  customMessage?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  userId?: string;
+}
 // ============================================================================
 
 export interface UserManagementResult {
   success: boolean;
   message: string;
-  user?: any;
+  user?: Record<string, unknown>;
 }
 
 export interface PasswordResetResult {
@@ -20,7 +31,7 @@ export interface PasswordResetResult {
 }
 
 export interface UserListResult {
-  users: any[];
+  users: Record<string, unknown>[];
   totalCount: number;
   hasMore: boolean;
   filters: {
@@ -46,14 +57,19 @@ export interface ActivityLog {
   id: string;
   userId: string;
   activityType: string;
-  details?: any;
   performedBy: string;
   timestamp: Date;
-  user?: any;
+  details?: Record<string, unknown>;
+  user?: Record<string, unknown>;
 }
 
 // ============================================================================
 // VALIDATION SCHEMAS
+export const AccountRequestInput = z.object({
+  email: z.string().email('Invalid email format'),
+  requesterName: z.string().min(1, 'Name is required').max(100, 'Name too long'),
+  requestedRole: z.enum(['ADMIN', 'EDITOR', 'AUTHOR']),
+});
 // ============================================================================
 
 export const CreateUserInput = z.object({
@@ -141,7 +157,7 @@ async function logActivity(
   userId: string,
   activityType: string,
   performedBy: string,
-  details?: any
+  details?: Record<string, unknown>
 ): Promise<void> {
   try {
     // Note: This would require an ActivityLog table in the database
@@ -259,7 +275,7 @@ export async function listUsers(
     const { take, skip, search, role, status, sortBy, sortOrder } = validatedInput;
 
     // Build where clause for filtering
-    const where: any = {};
+    const where: Record<string, unknown> = {};
 
     if (search) {
       where.OR = [
@@ -321,7 +337,7 @@ export async function getUserById(
   userId: string,
   requestingUserId: string,
   isAdmin: boolean = false
-): Promise<any> {
+): Promise<Record<string, unknown> | null> {
   try {
     // Users can only view their own profile unless they're admin
     if (!isAdmin && userId !== requestingUserId) {
@@ -664,9 +680,24 @@ export async function requestPasswordReset(
     const resetToken = generateSecureToken();
     const resetTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    // Note: This would require resetToken and resetTokenExpiry fields in User model
-    // For now, we'll simulate the process
-    console.log(`Password reset requested for ${email}. Token: ${resetToken}`);
+    // Store reset token and expiry in user record
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken,
+        resetTokenExpiry,
+      },
+    });
+
+    // Send email with reset link
+    const { EmailService } = await import('../services/emailService');
+    const resetLink = `https://pulse-news/reset-password?token=${resetToken}`;
+    await EmailService.sendNotificationEmail({
+      to: email,
+      subject: 'Pulse News Password Reset',
+      text: `Reset your password using this link: ${resetLink}`,
+      html: `<p>Reset your password using this link: <a href="${resetLink}">${resetLink}</a></p>`,
+    });
 
     // TODO: Update user with reset token when fields are added to schema
     // await prisma.user.update({
@@ -706,19 +737,13 @@ export async function resetPassword(
     const validatedInput = ResetPasswordInput.parse(input);
     const { token, newPassword } = validatedInput;
 
-    // TODO: Find user by reset token when fields are added to schema
-    // const user = await prisma.user.findFirst({
-    //   where: {
-    //     resetToken: token,
-    //     resetTokenExpiry: { gt: new Date() },
-    //   },
-    // });
-
-    // For now, simulate token validation
-    console.log(`Password reset attempted with token: ${token}`);
-
-    // Simulate user lookup (replace with actual implementation)
-    const user = null; // This would be the actual user from token lookup
+    // Find user by reset token and expiry
+    const user = await prisma.user.findFirst({
+      where: {
+        resetToken: token,
+        resetTokenExpiry: { gt: new Date() },
+      },
+    });
 
     if (!user) {
       return {
@@ -727,21 +752,16 @@ export async function resetPassword(
       };
     }
 
-    // Hash new password
     const hashedPassword = await hashPassword(newPassword);
-
-    // TODO: Update user password and clear reset token
-    // await prisma.user.update({
-    //   where: { id: user.id },
-    //   data: {
-    //     password: hashedPassword,
-    //     resetToken: null,
-    //     resetTokenExpiry: null,
-    //   },
-    // });
-
-    // Log activity
-    // await logActivity(user.id, 'PASSWORD_RESET_COMPLETED', user.id);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+    await logActivity(user.id, 'PASSWORD_RESET_COMPLETED', user.id);
 
     return {
       success: true,
@@ -873,29 +893,22 @@ export async function getUserStats(): Promise<UserStats> {
  */
 export async function getUserActivity(userId?: string, limit: number = 50): Promise<ActivityLog[]> {
   try {
-    // TODO: Implement when ActivityLog table is created
-    // For now, return empty array
-    console.log(`Getting activity logs for user: ${userId || 'all'}, limit: ${limit}`);
-
-    return [];
-
-    // Future implementation:
-    // const where = userId ? { userId } : {};
-    // const activities = await prisma.activityLog.findMany({
-    //   where,
-    //   take: limit,
-    //   orderBy: { timestamp: 'desc' },
-    //   include: {
-    //     user: {
-    //       select: {
-    //         id: true,
-    //         name: true,
-    //         email: true,
-    //       },
-    //     },
-    //   },
-    // });
-    // return activities;
+    const where = userId ? { userId } : {};
+    const activities = await prisma.ActivityLog.findMany({
+      where,
+      take: limit,
+      orderBy: { timestamp: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+    return activities as ActivityLog[];
   } catch (error) {
     console.error('Error getting user activity:', error);
     return [];
