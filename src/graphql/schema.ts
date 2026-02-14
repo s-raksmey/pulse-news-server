@@ -2266,7 +2266,7 @@ export const schema = createSchema({
               const admins = await db.user.findMany({ where: { role: 'ADMIN', isActive: true } });
               const { NotificationService } = await import('../services/notificationService');
               await NotificationService.createAndDispatch(admins.map((admin: any) => ({
-                type: 'SUBMISSION',
+                type: 'ACCOUNT_REQUEST',
                 title: 'New Account Request',
                 message: `${parsed.requesterName} requested ${parsed.requestedRole} role.`,
                 fromUserId: '',
