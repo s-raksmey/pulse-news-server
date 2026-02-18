@@ -200,7 +200,7 @@ export async function listRegistrationRequests(
 ): Promise<RegistrationRequestListResponse> {
   try {
     // Check admin permission
-    if (!context.user || context.user.role !== 'ADMIN') {
+    if (!context.user || context.user.role !== UserRole.ADMIN) {
       return {
         success: false,
         message: 'Admin access required',
@@ -289,7 +289,7 @@ export async function approveRegistrationRequest(
 ): Promise<AdminReviewResponse> {
   try {
     // Check admin permission
-    if (!context.user || context.user.role !== 'ADMIN') {
+    if (!context.user || context.user.role !== UserRole.ADMIN) {
       return {
         success: false,
         message: 'Admin access required',
@@ -340,7 +340,7 @@ export async function rejectRegistrationRequest(
 ): Promise<AdminReviewResponse> {
   try {
     // Check admin permission
-    if (!context.user || context.user.role !== 'ADMIN') {
+    if (!context.user || context.user.role !== UserRole.ADMIN) {
       return {
         success: false,
         message: 'Admin access required',
@@ -386,7 +386,7 @@ export async function getRegistrationStats(
 ): Promise<RegistrationStatsResponse> {
   try {
     // Check admin permission
-    if (!context.user || context.user.role !== 'ADMIN') {
+    if (!context.user || context.user.role !== UserRole.ADMIN) {
       throw new Error('Admin access required');
     }
 
@@ -419,7 +419,7 @@ export async function bulkApproveRegistrationRequests(
 ): Promise<AdminReviewResponse> {
   try {
     // Check admin permission
-    if (!context.user || context.user.role !== 'ADMIN') {
+    if (!context.user || context.user.role !== UserRole.ADMIN) {
       return {
         success: false,
         message: 'Admin access required',
@@ -485,7 +485,7 @@ export async function bulkRejectRegistrationRequests(
 ): Promise<AdminReviewResponse> {
   try {
     // Check admin permission
-    if (!context.user || context.user.role !== 'ADMIN') {
+    if (!context.user || context.user.role !== UserRole.ADMIN) {
       return {
         success: false,
         message: 'Admin access required',
