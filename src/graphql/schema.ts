@@ -17,6 +17,7 @@ import {
 import { searchArticles, getSearchSuggestions } from '../services/searchService';
 import { getRelatedArticles } from '../services/relatedArticlesService';
 import { getSettingConfig } from '../data/settings-config';
+import { registrationRequestTypeDefs, registrationRequestResolvers } from './registrationRequestSchema';
 
 /**
  * IMPORTANT:
@@ -1136,7 +1137,8 @@ export const schema = createSchema({
       key: String!
       value: JSON!
     }
-  `,
+
+  ` + registrationRequestTypeDefs,
 
   resolvers: {
         AccountRequest: {
@@ -3865,5 +3867,8 @@ export const schema = createSchema({
         return updatedRequest;
       },
     },
+
+    // Registration Request Resolvers
+    ...registrationRequestResolvers,
   },
 });
