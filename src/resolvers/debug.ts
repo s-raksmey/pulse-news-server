@@ -27,11 +27,11 @@ export const debugArticles = async (_: unknown, args: any, context: GraphQLConte
 
     // Check permissions
     const hasUpdateAnyPermission = PermissionService.hasPermission(
-      userRole as any,
+      userRole,
       Permission.UPDATE_ANY_ARTICLE
     );
     const hasReviewPermission = PermissionService.hasPermission(
-      userRole as any,
+      userRole,
       Permission.REVIEW_ARTICLES
     );
 
