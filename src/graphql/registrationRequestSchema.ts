@@ -149,12 +149,12 @@ export const registrationRequestResolvers = {
           limit: input?.limit,
           offset: input?.offset,
         },
-        context
+        { ...context, user: context.user ? { ...context.user, role: context.user.role as any } : undefined }
       );
     },
 
     getRegistrationStats: async (_: unknown, __: unknown, context: GraphQLContext) => {
-      return await getRegistrationStats(context);
+      return await getRegistrationStats({ ...context, user: context.user ? { ...context.user, role: context.user.role as any } : undefined });
     },
   },
 
@@ -195,7 +195,7 @@ export const registrationRequestResolvers = {
           registrationId: input.registrationId,
           reviewNotes: input.reviewNotes,
         },
-        context
+        { ...context, user: context.user ? { ...context.user, role: context.user.role as any } : undefined }
       );
     },
 
@@ -209,7 +209,7 @@ export const registrationRequestResolvers = {
           registrationId: input.registrationId,
           reviewNotes: input.reviewNotes,
         },
-        context
+        { ...context, user: context.user ? { ...context.user, role: context.user.role as any } : undefined }
       );
     },
 
@@ -223,7 +223,7 @@ export const registrationRequestResolvers = {
           registrationIds: input.registrationIds,
           reviewNotes: input.reviewNotes,
         },
-        context
+        { ...context, user: context.user ? { ...context.user, role: context.user.role as any } : undefined }
       );
     },
 
@@ -237,7 +237,7 @@ export const registrationRequestResolvers = {
           registrationIds: input.registrationIds,
           reviewNotes: input.reviewNotes,
         },
-        context
+        { ...context, user: context.user ? { ...context.user, role: context.user.role as any } : undefined }
       );
     },
   },
