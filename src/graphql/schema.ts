@@ -1427,15 +1427,15 @@ export const schema = createSchema({
 
           const userRole = context.user.role;
           const hasCreateArticle = PermissionService.hasPermission(
-            userRole as any,
+            userRole,
             Permission.CREATE_ARTICLE
           );
           const hasUpdateAny = PermissionService.hasPermission(
-            userRole as any,
+            userRole,
             Permission.UPDATE_ANY_ARTICLE
           );
           const hasReviewArticles = PermissionService.hasPermission(
-            userRole as any,
+            userRole,
             Permission.REVIEW_ARTICLES
           );
 
@@ -1455,7 +1455,7 @@ export const schema = createSchema({
                 UPDATE_ANY_ARTICLE: hasUpdateAny,
                 REVIEW_ARTICLES: hasReviewArticles,
               },
-              rolePermissions: PermissionService.getRolePermissions(userRole as any),
+              rolePermissions: PermissionService.getRolePermissions(userRole),
               timestamp: new Date().toISOString(),
             },
           };
@@ -1508,7 +1508,7 @@ export const schema = createSchema({
 
           // Check if user has permission to see all articles
           const hasUpdateAnyPermission = PermissionService.hasPermission(
-            userRole as any,
+            userRole,
             Permission.UPDATE_ANY_ARTICLE
           );
 

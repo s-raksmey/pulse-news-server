@@ -1,5 +1,6 @@
 import { verifyToken, extractTokenFromHeader, createContextUser } from '../utils/jwt';
 import { prisma } from '../lib/prisma';
+import { UserRole } from '@prisma/client';
 
 /**
  * GraphQL Context type with optional authenticated user
@@ -9,7 +10,7 @@ export interface GraphQLContext {
     id: string;
     email: string;
     name: string;
-    role: string;
+    role: UserRole;
     isActive: boolean;
   };
   request: Request;
@@ -109,7 +110,7 @@ export function requireAuth(
  * Require Specific Role Guard
  * Throws error if user doesn't have required role
  */
-export function requireRole(context: GraphQLContext, requiredRole: string | string[]): void {
+export function requireRole(context: GraphQLContext, requiredRole: UserRole | UserRole[]): void {
   requireAuth(context);
 
   const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
@@ -123,21 +124,21 @@ export function requireRole(context: GraphQLContext, requiredRole: string | stri
  * Require Admin Role Guard
  */
 export function requireAdmin(context: GraphQLContext): void {
-  requireRole(context, 'ADMIN');
+  requireRole(context, UserRole.ADMIN);
 }
 
 /**
  * Require Editor or Admin Role Guard
  */
 export function requireEditor(context: GraphQLContext): void {
-  requireRole(context, ['ADMIN', 'EDITOR']);
+  requireRole(context, [UserRole.ADMIN, UserRole.EDITOR]);
 }
 
 /**
  * Require Author, Editor, or Admin Role Guard
  */
 export function requireAuthor(context: GraphQLContext): void {
-  requireRole(context, ['ADMIN', 'EDITOR', 'AUTHOR']);
+  requireRole(context, [UserRole.ADMIN, UserRole.EDITOR, UserRole.AUTHOR]);
 }
 
 /**
