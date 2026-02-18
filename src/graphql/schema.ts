@@ -2252,6 +2252,9 @@ export const schema = createSchema({
           },
         });
       },
+
+      // Registration Request Queries
+      ...registrationRequestResolvers.Query,
     },
 
     Mutation: {
@@ -3866,9 +3869,10 @@ export const schema = createSchema({
 
         return updatedRequest;
       },
+
+      // Registration Request Mutations
+      ...registrationRequestResolvers.Mutation,
     },
 
-    // Registration Request Resolvers
-    ...registrationRequestResolvers,
   },
 });
