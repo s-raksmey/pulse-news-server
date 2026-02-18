@@ -594,6 +594,7 @@ export const schema = createSchema({
       REVISION_APPROVED
       REVISION_REJECTED
       REVISION_CONSUMED
+      ACCOUNT_REQUEST
     }
 
     type Notification {
