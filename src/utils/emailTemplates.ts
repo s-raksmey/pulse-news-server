@@ -24,6 +24,13 @@ export interface RegistrationReceivedData {
   email: string;
 }
 
+export interface AccountActivationData {
+  name: string;
+  email: string;
+  loginUrl: string;
+  role: string;
+}
+
 export class EmailTemplates {
   private static getBaseStyles(): string {
     return `
@@ -339,6 +346,103 @@ ${data.reason ? `Reason: ${data.reason}\n\n` : ''}
 If you believe this decision was made in error or if you have additional information that might help with your application, please feel free to contact our support team at ${data.supportEmail}.
 
 We appreciate your understanding and interest in Pulse News.
+
+Best regards,
+The Pulse News Team
+
+---
+© 2024 Pulse News. All rights reserved.
+This is an automated message, please do not reply to this email.
+    `;
+
+    return { html, text };
+  }
+
+  static generateAccountActivation(data: AccountActivationData): { html: string; text: string } {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Account Activated - Welcome to Pulse News! 🎉</title>
+        ${this.getBaseStyles()}
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo">📰 Pulse News</div>
+            <div class="subtitle">Account Activated! 🎉</div>
+          </div>
+          <div class="content">
+            <h2>Congratulations ${data.name}!</h2>
+            <p>Your account verification was successful! Your Pulse News account is now fully activated and ready to use.</p>
+            
+            <div class="alert alert-success">
+              <strong>🎉 Account Successfully Activated!</strong><br>
+              You can now log in and start exploring all the features available to you.
+            </div>
+            
+            <div style="text-align: center;">
+              <a href="${data.loginUrl}" class="btn">Login to Your Account</a>
+            </div>
+            
+            <p><strong>Your Account Details:</strong></p>
+            <ul>
+              <li><strong>Email:</strong> ${data.email}</li>
+              <li><strong>Name:</strong> ${data.name}</li>
+              <li><strong>Role:</strong> ${data.role}</li>
+              <li><strong>Status:</strong> Active</li>
+            </ul>
+            
+            <p>You can now:</p>
+            <ul>
+              <li>Access your dashboard</li>
+              <li>Create and manage content</li>
+              <li>Collaborate with the team</li>
+              <li>Explore all available features</li>
+            </ul>
+            
+            <p>Thank you for completing the verification process. If you have any questions or need assistance getting started, don't hesitate to reach out to our support team.</p>
+            
+            <p>Welcome to Pulse News!</p>
+            
+            <p>Best regards,<br>The Pulse News Team</p>
+          </div>
+          <div class="footer">
+            <p>&copy; 2024 Pulse News. All rights reserved.</p>
+            <p>This is an automated message, please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `
+Congratulations ${data.name}!
+
+Your account verification was successful! Your Pulse News account is now fully activated and ready to use.
+
+🎉 ACCOUNT SUCCESSFULLY ACTIVATED!
+You can now log in and start exploring all the features available to you.
+
+Login here: ${data.loginUrl}
+
+Your Account Details:
+- Email: ${data.email}
+- Name: ${data.name}
+- Role: ${data.role}
+- Status: Active
+
+You can now:
+- Access your dashboard
+- Create and manage content
+- Collaborate with the team
+- Explore all available features
+
+Thank you for completing the verification process. If you have any questions or need assistance getting started, don't hesitate to reach out to our support team.
+
+Welcome to Pulse News!
 
 Best regards,
 The Pulse News Team
