@@ -107,29 +107,20 @@ export class RegistrationWorkflowService {
         verificationTokenExpiry.getHours() + this.VERIFICATION_TOKEN_EXPIRY_HOURS
       );
 
-      // Create registration request
+      // Create registration request with PENDING_APPROVAL status
+      // Email verification will be sent only after admin approval
       const registrationRequest = await prisma.registrationRequest.create({
         data: {
           email: input.email.toLowerCase(),
           password: hashedPassword,
           name: input.name,
           requestedRole: input.requestedRole || 'AUTHOR',
-          status: 'PENDING_VERIFICATION',
+          status: 'PENDING_APPROVAL',
           verificationToken,
           verificationTokenExpiry,
           ipAddress: input.ipAddress,
           userAgent: input.userAgent,
         },
-      });
-
-      // Send verification email
-      const baseUrl = await EmailService.getBaseUrl();
-      const verificationUrl = `${baseUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(input.email)}`;
-
-      await EmailService.sendEmailVerification({
-        name: input.name,
-        verificationUrl,
-        expiryHours: this.VERIFICATION_TOKEN_EXPIRY_HOURS,
       });
 
       // Log the registration request
@@ -149,7 +140,7 @@ export class RegistrationWorkflowService {
 
       return {
         success: true,
-        message: 'Registration request submitted successfully. Please check your email to verify your address.',
+        message: 'Registration request submitted successfully. Please wait for admin approval.',
         registrationId: registrationRequest.id,
       };
     } catch (error) {
@@ -167,18 +158,19 @@ export class RegistrationWorkflowService {
   static async verifyEmail(token: string, email: string): Promise<EmailVerificationResult> {
     try {
       // Find registration request by token and email
+      // Only approved registrations can be verified
       const registrationRequest = await prisma.registrationRequest.findFirst({
         where: {
           verificationToken: token,
           email: email.toLowerCase(),
-          status: 'PENDING_VERIFICATION',
+          status: 'APPROVED',
         },
       });
 
       if (!registrationRequest) {
         return {
           success: false,
-          message: 'Invalid or expired verification link',
+          message: 'Invalid or expired verification link. Please ensure your registration has been approved by an admin.',
         };
       }
 
@@ -197,43 +189,60 @@ export class RegistrationWorkflowService {
         };
       }
 
-      // Update registration request status
+      // Create the user account now that email is verified
+      const user = await prisma.user.create({
+        data: {
+          email: registrationRequest.email,
+          password: registrationRequest.password,
+          name: registrationRequest.name,
+          role: registrationRequest.requestedRole,
+          isActive: true,
+        },
+      });
+
+      // Update registration request status to completed
       const updatedRequest = await prisma.registrationRequest.update({
         where: { id: registrationRequest.id },
         data: {
-          status: 'PENDING_APPROVAL',
+          status: 'APPROVED', // Keep as APPROVED but mark as verified
           emailVerifiedAt: new Date(),
           verificationToken: null, // Clear the token after use
           verificationTokenExpiry: null,
         },
       });
 
-      // Send confirmation email
-      await EmailService.sendRegistrationReceived(email, {
+      // Send congratulations email
+      const baseUrl = await EmailService.getBaseUrl();
+      const loginUrl = `${baseUrl}/login`;
+
+      await EmailService.sendRegistrationApproved(email, {
         name: registrationRequest.name,
         email: registrationRequest.email,
+        loginUrl,
+        role: registrationRequest.requestedRole,
       });
 
-      // Log the email verification
+      // Log the email verification and account creation
       await AuditService.logEvent({
         eventType: AuditEventType.USER_REGISTRATION,
-        userId: null,
+        userId: user.id,
         success: true,
         details: {
           email: registrationRequest.email,
-          action: 'email_verified',
+          action: 'email_verified_account_created',
           registrationId: registrationRequest.id,
         },
       });
 
       return {
         success: true,
-        message: 'Email verified successfully. Your registration is now pending admin approval.',
-        registrationRequest: {
-          id: updatedRequest.id,
-          email: updatedRequest.email,
-          name: updatedRequest.name,
-          status: updatedRequest.status,
+        message: 'Email verified successfully. Your account has been created and is now active!',
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          isActive: user.isActive,
         },
       };
     } catch (error) {
@@ -296,18 +305,8 @@ export class RegistrationWorkflowService {
         };
       }
 
-      // Create the user account
-      const user = await prisma.user.create({
-        data: {
-          email: registrationRequest.email,
-          password: registrationRequest.password,
-          name: registrationRequest.name,
-          role: registrationRequest.requestedRole,
-          isActive: true,
-        },
-      });
-
-      // Update registration request status
+      // Update registration request status to APPROVED
+      // User account will be created after email verification
       await prisma.registrationRequest.update({
         where: { id: registrationId },
         data: {
@@ -318,21 +317,20 @@ export class RegistrationWorkflowService {
         },
       });
 
-      // Send approval email
+      // Send verification email to approved user
       const baseUrl = await EmailService.getBaseUrl();
-      const loginUrl = `${baseUrl}/login`;
+      const verificationUrl = `${baseUrl}/verify-email?token=${registrationRequest.verificationToken}&email=${encodeURIComponent(registrationRequest.email)}`;
 
-      await EmailService.sendRegistrationApproved(registrationRequest.email, {
+      await EmailService.sendEmailVerification({
         name: registrationRequest.name,
-        email: registrationRequest.email,
-        loginUrl,
-        role: registrationRequest.requestedRole,
+        verificationUrl,
+        expiryHours: this.VERIFICATION_TOKEN_EXPIRY_HOURS,
       });
 
       // Log the approval
       await AuditService.logEvent({
         eventType: AuditEventType.USER_REGISTRATION,
-        userId: user.id,
+        userId: null, // User account not created yet
         success: true,
         details: {
           email: registrationRequest.email,
@@ -345,14 +343,8 @@ export class RegistrationWorkflowService {
 
       return {
         success: true,
-        message: 'Registration approved successfully. User account created.',
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          isActive: user.isActive,
-        },
+        message: 'Registration approved successfully. Verification email sent to user.',
+        user: null, // User account will be created after email verification
       };
     } catch (error) {
       console.error('Registration approval error:', error);
