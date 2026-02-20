@@ -48,11 +48,22 @@ export class EmailService {
 
     if (!notificationsEnabled) return null;
 
-    const host = await SettingsService.getSettingValue<string>('email.smtp_host');
-    const portValue = await SettingsService.getSettingValue<number>('email.smtp_port');
-    const username = await SettingsService.getSettingValue<string>('email.smtp_username');
-    const password = await SettingsService.getSettingValue<string>('email.smtp_password');
-    const fromAddress = await SettingsService.getSettingValue<string>('email.from_address');
+    // Try to get settings from database first, then fall back to environment variables
+    const host = 
+      (await SettingsService.getSettingValue<string>('email.smtp_host')) || 
+      process.env.SMTP_HOST;
+    const portValue = 
+      (await SettingsService.getSettingValue<number>('email.smtp_port')) || 
+      process.env.SMTP_PORT;
+    const username = 
+      (await SettingsService.getSettingValue<string>('email.smtp_username')) || 
+      process.env.SMTP_USERNAME;
+    const password = 
+      (await SettingsService.getSettingValue<string>('email.smtp_password')) || 
+      process.env.SMTP_PASSWORD;
+    const fromAddress = 
+      (await SettingsService.getSettingValue<string>('email.from_address')) || 
+      process.env.SMTP_USERNAME; // Use SMTP_USERNAME as from address if not set
     const fromName =
       (await SettingsService.getSettingValue<string>('email.from_name')) ?? 'Pulse News';
 
@@ -162,13 +173,17 @@ export class EmailService {
 
   // Utility method to get support email from settings
   static async getSupportEmail(): Promise<string> {
-    const supportEmail = await SettingsService.getSettingValue<string>('email.support_address');
+    const supportEmail = 
+      (await SettingsService.getSettingValue<string>('email.support_address')) || 
+      process.env.SUPPORT_EMAIL;
     return supportEmail || 'support@pulsenews.com';
   }
 
   // Utility method to get base URL for links
   static async getBaseUrl(): Promise<string> {
-    const baseUrl = await SettingsService.getSettingValue<string>('site.base_url');
+    const baseUrl = 
+      (await SettingsService.getSettingValue<string>('site.base_url')) || 
+      process.env.SITE_BASE_URL;
     return baseUrl || 'https://pulsenews.com';
   }
 }

@@ -2296,29 +2296,43 @@ export const schema = createSchema({
               requireAdmin(context);
               const request = await db.accountRequest.update({
                 where: { id },
-                data: { status: 'awaiting_verification', customMessage },
+                data: { status: 'approved', customMessage },
               });
-              // Send verification email to requester
-              const { EmailService } = await import('../services/emailService');
-              const verificationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-              await db.accountRequest.update({ where: { id }, data: { customMessage, status: 'awaiting_verification', verificationCode } });
-              await EmailService.sendNotificationEmail({
-                to: request.email,
-                subject: 'Pulse News Account Verification',
-                text: `Your account request was approved. ${customMessage || ''}\nVerification code: ${verificationCode}`,
-                html: `<h2>Pulse News Account Verification</h2><p>Your account request was approved.</p><p>${customMessage || ''}</p><p><b>Verification code:</b> ${verificationCode}</p>`,
-              });
+              
+              try {
+                // Send approval email using proper template
+                const { EmailService } = await import('../services/emailService');
+                const baseUrl = await EmailService.getBaseUrl();
+                
+                await EmailService.sendRegistrationApproved(request.email, {
+                  name: request.requesterName,
+                  email: request.email,
+                  loginUrl: `${baseUrl}/login`,
+                  role: request.requestedRole,
+                });
+                
+                console.log(`✅ Approval email sent to ${request.email}`);
+              } catch (error) {
+                console.error('❌ Failed to send approval email:', error);
+                // Don't fail the approval if email fails
+              }
+
+              try {
               // In-app notification
               const { NotificationService } = await import('../services/notificationService');
               await NotificationService.createAndDispatch([{
                 type: 'APPROVAL',
                 title: 'Account Request Approved',
-                message: customMessage || '',
+                message: customMessage || 'Your account request has been approved!',
                 fromUserId: context.user.id,
                 toUserId: request.userId ? request.userId : ''
               }]);
-              return { success: true, message: 'Account request approved', request };
+              } catch (error) {
+                console.error('❌ Failed to send in-app notification:', error);
+              }
             },
+              
+              return { success: true, message: 'Account request approved and email sent', request };
 
             rejectAccountRequest: async (_: unknown, { id, customMessage }: any, context: GraphQLContext) => {
               requireAuth(context);
@@ -2327,23 +2341,37 @@ export const schema = createSchema({
                 where: { id },
                 data: { status: 'rejected', customMessage },
               });
-              // Send rejection notification to requester
-              const { EmailService } = await import('../services/emailService');
-              await EmailService.sendNotificationEmail({
-                to: request.email,
-                subject: 'Pulse News Account Request Rejected',
-                text: `Your account request was rejected. ${customMessage || ''}`,
-                html: `<h2>Pulse News Account Request Rejected</h2><p>Your account request was rejected.</p><p>${customMessage || ''}</p>`,
-              });
+              
+              try {
+                // Send rejection email using proper template
+                const { EmailService } = await import('../services/emailService');
+                const supportEmail = await EmailService.getSupportEmail();
+                
+                await EmailService.sendRegistrationRejected(request.email, {
+                  name: request.requesterName,
+                  reason: customMessage,
+                  supportEmail: supportEmail,
+                });
+                
+                console.log(`✅ Rejection email sent to ${request.email}`);
+              } catch (error) {
+                console.error('❌ Failed to send rejection email:', error);
+                // Don't fail the rejection if email fails
+              }
+
+              try {
               const { NotificationService } = await import('../services/notificationService');
               await NotificationService.createAndDispatch([{
                 type: 'REJECTION',
                 title: 'Account Request Rejected',
-                message: customMessage || '',
+                message: customMessage || 'Your account request has been rejected.',
                 fromUserId: context.user.id,
                 toUserId: request.userId ? request.userId : ''
               }]);
-              return { success: true, message: 'Account request rejected', request };
+              } catch (error) {
+                console.error('❌ Failed to send in-app notification:', error);
+              }
+              return { success: true, message: 'Account request rejected and email sent', request };
             },
 
             verifyAccountRequest: async (_: unknown, { id, code }: any) => {
