@@ -16,6 +16,8 @@
     "diagnose-categories": "tsx src/scripts/diagnose-categories.ts",
     "fix-categories": "tsx src/scripts/fix-article-categories.ts --apply",
     "fix-categories-dry-run": "tsx src/scripts/fix-article-categories.ts",
+    "cleanup-registrations": "tsx src/scripts/cleanup-old-registration-data.ts",
+    "quick-cleanup": "tsx src/scripts/quick-cleanup-registrations.ts",
     "lint": "eslint src prisma --ext .ts",
     "lint:fix": "eslint src prisma --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.ts\"",
