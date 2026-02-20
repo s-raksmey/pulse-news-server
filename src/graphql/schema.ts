@@ -12,6 +12,8 @@ import {
   requireEditor,
   requireAdmin,
   requirePreview,
+  AuthenticationError,
+  AuthorizationError,
 } from '../middleware/auth';
 
 import { searchArticles, getSearchSuggestions } from '../services/searchService';
@@ -1392,8 +1394,16 @@ export const schema = createSchema({
 
     Query: {
             accountRequests: async (_: unknown, { status }: { status?: string }, context: GraphQLContext) => {
-              requireAuth(context);
-              requireAdmin(context);
+              // Check authentication gracefully
+              if (!context.user) {
+                throw new AuthenticationError('Authentication required');
+              }
+              
+              // Check admin role
+              if (context.user.role !== 'ADMIN') {
+                throw new AuthorizationError('Admin access required');
+              }
+              
               return db.accountRequest.findMany({
                 where: status ? { status } : {},
                 orderBy: { createdAt: 'desc' },
