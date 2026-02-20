@@ -9,7 +9,8 @@ import {
   bulkApproveRegistrationRequests,
   bulkRejectRegistrationRequests,
 } from '../resolvers/registrationRequest';
-import { GraphQLContext, requireAdmin } from '../middleware/auth';
+import { GraphQLContext } from '../middleware/auth';
+import type { UserRole } from '../resolvers/registrationRequest';
 
 export const registrationRequestTypeDefs = `
   enum RegistrationRequestStatus {
@@ -140,12 +141,12 @@ export const registrationRequestResolvers = {
   Query: {
     listRegistrationRequests: async (
       _: unknown,
-      { input }: { input?: { status?: string; limit?: number; offset?: number } },
+      { input }: { input?: { status?: 'PENDING_VERIFICATION' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'EXPIRED'; limit?: number; offset?: number } },
       context: GraphQLContext
     ) => {
       return await listRegistrationRequests(
         {
-          status: input?.status as any,
+          status: input?.status,
           limit: input?.limit,
           offset: input?.offset,
         },
@@ -169,7 +170,7 @@ export const registrationRequestResolvers = {
           email: input.email,
           password: input.password,
           name: input.name,
-          requestedRole: input.requestedRole as any,
+          requestedRole: input.requestedRole as UserRole | undefined,
         },
         context.request
       );

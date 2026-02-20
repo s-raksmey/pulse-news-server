@@ -255,14 +255,14 @@ export async function listRegistrationRequests(
       requestedRole: request.requestedRole,
       status: request.status,
       emailVerifiedAt: request.emailVerifiedAt?.toISOString(),
-      reviewedBy: request.reviewedBy,
-      reviewedAt: request.reviewedAt?.toISOString(),
-      reviewNotes: request.reviewNotes,
-      ipAddress: request.ipAddress,
-      userAgent: request.userAgent,
+      reviewedBy: request.reviewedBy ?? undefined,
+      reviewedAt: request.reviewedAt ? request.reviewedAt.toISOString() : undefined,
+      reviewNotes: request.reviewNotes === null ? undefined : request.reviewNotes,
+      ipAddress: request.ipAddress === null ? undefined : request.ipAddress,
+      userAgent: request.userAgent === null ? undefined : request.userAgent,
       createdAt: request.createdAt.toISOString(),
       updatedAt: request.updatedAt.toISOString(),
-      reviewer: request.reviewer,
+      reviewer: request.reviewer ?? undefined,
     }));
 
     console.log(`✅ [GraphQL Resolver] Returning ${formattedRequests.length} formatted requests`);
@@ -557,3 +557,5 @@ export async function bulkRejectRegistrationRequests(
     };
   }
 }
+
+export { UserRole };
