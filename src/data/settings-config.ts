@@ -143,6 +143,24 @@ export const SETTINGS_CONFIG: SettingConfig[] = [
     defaultValue: true,
     validation: { type: 'boolean' },
   },
+  {
+    key: 'email.support_address',
+    type: 'EMAIL',
+    label: 'Support Email Address',
+    description: 'Email address for user support and contact',
+    defaultValue: 'support@pulsenews.com',
+    validation: { type: 'email' },
+  },
+
+  // SITE SETTINGS
+  {
+    key: 'site.base_url',
+    type: 'SITE',
+    label: 'Base URL',
+    description: 'Base URL for the website (used in email links)',
+    defaultValue: 'https://pulsenews.com',
+    validation: { type: 'string' },
+  },
 
   // SEO SETTINGS
   {
