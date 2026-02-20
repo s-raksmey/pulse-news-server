@@ -447,7 +447,15 @@ export class RegistrationWorkflowService {
     offset: number = 0
   ) {
     try {
+      console.log(`🔍 [RegistrationWorkflowService] getRegistrationRequests called with:`, {
+        status,
+        limit,
+        offset,
+        timestamp: new Date().toISOString()
+      });
+
       const where = status ? { status } : {};
+      console.log(`🔍 [RegistrationWorkflowService] Prisma where clause:`, where);
 
       const [requests, totalCount] = await Promise.all([
         prisma.registrationRequest.findMany({
@@ -468,6 +476,18 @@ export class RegistrationWorkflowService {
         prisma.registrationRequest.count({ where }),
       ]);
 
+      console.log(`🔍 [RegistrationWorkflowService] Database query results:`, {
+        requestsFound: requests.length,
+        totalCount,
+        hasMore: offset + limit < totalCount,
+        sampleRequests: requests.slice(0, 3).map(r => ({
+          id: r.id,
+          email: r.email,
+          status: r.status,
+          createdAt: r.createdAt
+        }))
+      });
+
       return {
         success: true,
         requests,
@@ -475,7 +495,7 @@ export class RegistrationWorkflowService {
         hasMore: offset + limit < totalCount,
       };
     } catch (error) {
-      console.error('Get registration requests error:', error);
+      console.error('❌ [RegistrationWorkflowService] Get registration requests error:', error);
       return {
         success: false,
         message: 'Failed to fetch registration requests',

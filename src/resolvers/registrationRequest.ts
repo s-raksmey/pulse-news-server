@@ -199,8 +199,16 @@ export async function listRegistrationRequests(
   context: { user?: { id: string; role: UserRole } }
 ): Promise<RegistrationRequestListResponse> {
   try {
+    console.log(`🔍 [GraphQL Resolver] listRegistrationRequests called with:`, {
+      args,
+      userId: context.user?.id,
+      userRole: context.user?.role,
+      timestamp: new Date().toISOString()
+    });
+
     // Check admin permission
     if (!context.user || context.user.role !== UserRole.ADMIN) {
+      console.log(`❌ [GraphQL Resolver] Access denied - user role: ${context.user?.role}`);
       return {
         success: false,
         message: 'Admin access required',
@@ -212,6 +220,7 @@ export async function listRegistrationRequests(
 
     // Validate input
     const validatedInput = ListRegistrationRequestsInput.parse(args);
+    console.log(`🔍 [GraphQL Resolver] Validated input:`, validatedInput);
 
     // Get registration requests
     const result = await RegistrationWorkflowService.getRegistrationRequests(
@@ -219,6 +228,14 @@ export async function listRegistrationRequests(
       validatedInput.limit || 50,
       validatedInput.offset || 0
     );
+
+    console.log(`🔍 [GraphQL Resolver] Service result:`, {
+      success: result.success,
+      message: result.message,
+      requestCount: result.requests.length,
+      totalCount: result.totalCount,
+      hasMore: result.hasMore
+    });
 
     if (!result.success) {
       return {
@@ -248,6 +265,8 @@ export async function listRegistrationRequests(
       reviewer: request.reviewer,
     }));
 
+    console.log(`✅ [GraphQL Resolver] Returning ${formattedRequests.length} formatted requests`);
+
     return {
       success: true,
       requests: formattedRequests,
@@ -255,7 +274,7 @@ export async function listRegistrationRequests(
       hasMore: result.hasMore,
     };
   } catch (error) {
-    console.error('List registration requests error:', error);
+    console.error('❌ [GraphQL Resolver] List registration requests error:', error);
 
     if (error instanceof z.ZodError) {
       return {
