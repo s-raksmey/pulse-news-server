@@ -6,7 +6,8 @@ import {
   EmailVerificationData, 
   RegistrationApprovedData, 
   RegistrationRejectedData, 
-  RegistrationReceivedData 
+  RegistrationReceivedData,
+  AccountActivationData
 } from '../utils/emailTemplates';
 
 type EmailConfig = {
@@ -166,6 +167,17 @@ export class EmailService {
     await this.sendNotificationEmail({
       to: email,
       subject: 'Registration Update - Pulse News',
+      text,
+      html,
+    });
+  }
+
+  static async sendAccountActivation(email: string, data: AccountActivationData): Promise<void> {
+    const { html, text } = EmailTemplates.generateAccountActivation(data);
+    
+    await this.sendNotificationEmail({
+      to: email,
+      subject: '🎉 Account Activated - Welcome to Pulse News!',
       text,
       html,
     });

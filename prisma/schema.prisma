@@ -165,15 +165,16 @@ model Category {
   updatedAt DateTime @updatedAt
 }
 model AccountRequest {
-  id              String   @id @default(uuid())
-  email           String
-  requesterName   String
-  requestedRole   String
-  status          String   // pending, approved, rejected, awaiting_verification, active
-  customMessage   String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  userId          String?  // Link to User after activation
+  id               String   @id @default(uuid())
+  email            String
+  requesterName    String
+  requestedRole    String
+  status           String   // pending, approved, rejected, awaiting_verification, active
+  customMessage    String?
+  verificationCode String?  // Code for user verification after approval
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  userId           String?  // Link to User after activation
 }
 
 model Topic {

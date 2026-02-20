@@ -2294,28 +2294,13 @@ export const schema = createSchema({
             approveAccountRequest: async (_: unknown, { id, customMessage }: any, context: GraphQLContext) => {
               requireAuth(context);
               requireAdmin(context);
+              // Generate verification code for user verification
+              const verificationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
               const request = await db.accountRequest.update({
                 where: { id },
-                data: { status: 'approved', customMessage },
+                data: { status: 'awaiting_verification', customMessage, verificationCode },
               });
               
-              try {
-                // Send approval email using proper template
-                const { EmailService } = await import('../services/emailService');
-                const baseUrl = await EmailService.getBaseUrl();
-                
-                await EmailService.sendRegistrationApproved(request.email, {
-                  name: request.requesterName,
-                  email: request.email,
-                  loginUrl: `${baseUrl}/login`,
-                  role: request.requestedRole,
-                });
-                
-                console.log(`✅ Approval email sent to ${request.email}`);
-              } catch (error) {
-                console.error('❌ Failed to send approval email:', error);
-                // Don't fail the approval if email fails
-              }
 
               try {
               // In-app notification
@@ -2323,16 +2308,15 @@ export const schema = createSchema({
               await NotificationService.createAndDispatch([{
                 type: 'APPROVAL',
                 title: 'Account Request Approved',
-                message: customMessage || 'Your account request has been approved!',
+                message: customMessage || 'Your account request has been approved! Please check your email for verification instructions.',
                 fromUserId: context.user.id,
                 toUserId: request.userId ? request.userId : ''
               }]);
               } catch (error) {
                 console.error('❌ Failed to send in-app notification:', error);
               }
+              return { success: true, message: 'Account request approved. User will receive verification instructions.', request };
             },
-              
-              return { success: true, message: 'Account request approved and email sent', request };
 
             rejectAccountRequest: async (_: unknown, { id, customMessage }: any, context: GraphQLContext) => {
               requireAuth(context);
@@ -2398,13 +2382,23 @@ export const schema = createSchema({
                 data: { status: 'active', userId: user.id },
               });
               // Send congratulations notification
-              const { EmailService } = await import('../services/emailService');
-              await EmailService.sendNotificationEmail({
-                to: request.email,
-                subject: 'Pulse News Account Activated',
-                text: 'Congratulations! Your account is now active.',
-                html: '<h2>Congratulations!</h2><p>Your Pulse News account is now active.</p>',
-              });
+              // Send account activation email
+              try {
+                const { EmailService } = await import('../services/emailService');
+                const baseUrl = await EmailService.getBaseUrl();
+                
+                await EmailService.sendAccountActivation(request.email, {
+                  name: request.requesterName,
+                  email: request.email,
+                  loginUrl: `${baseUrl}/login`,
+                  role: request.requestedRole,
+                });
+                
+                console.log(`✅ Account activation email sent to ${request.email}`);
+              } catch (error) {
+                console.error('❌ Failed to send activation email:', error);
+                // Don't fail the verification if email fails
+              }
               const { NotificationService } = await import('../services/notificationService');
               await NotificationService.createAndDispatch([{
                 type: 'APPROVAL',
