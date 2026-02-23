@@ -2884,7 +2884,6 @@ export const schema = createSchema({
       createCategory: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
         return await debugCreateCategory(input, context);
       },
-      },
 
       updateCategory: async (
         _: unknown,
