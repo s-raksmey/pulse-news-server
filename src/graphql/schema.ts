@@ -889,6 +889,7 @@ export const schema = createSchema({
       description: String
       coverImageUrl: String
       coverVideoUrl: String
+      isAdminCreated: Boolean!
       createdAt: String!
       updatedAt: String!
       category: Category!
@@ -1713,7 +1714,10 @@ export const schema = createSchema({
         if (!category) return [];
 
         return db.topic.findMany({
-          where: { categoryId: category.id },
+          where: { 
+            categoryId: category.id,
+            isAdminCreated: true 
+          },
           orderBy: { title: 'asc' },
         });
       },
@@ -2845,6 +2849,7 @@ export const schema = createSchema({
           coverImageUrl: data.coverImageUrl ?? null,
           coverVideoUrl: data.coverVideoUrl ?? null,
           categoryId: category.id,
+          isAdminCreated: true,
         };
 
         if (id) {
