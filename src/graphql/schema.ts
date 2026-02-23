@@ -20,6 +20,7 @@ import { searchArticles, getSearchSuggestions } from '../services/searchService'
 import { getRelatedArticles } from '../services/relatedArticlesService';
 import { getSettingConfig } from '../data/settings-config';
 import { registrationRequestTypeDefs, registrationRequestResolvers } from './registrationRequestSchema';
+import { debugCreateCategory } from '../debug/category-debug';
 
 /**
  * IMPORTANT:
@@ -2881,31 +2882,8 @@ export const schema = createSchema({
       // ============================================================================
 
       createCategory: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
-        requireAuth(context);
-        requireAdmin(context);
-
-        const data = z
-          .object({
-            name: z.string().min(1, 'Name is required'),
-            slug: z.string().min(1, 'Slug is required'),
-          })
-          .parse(input);
-
-        // Check if slug already exists
-        const existingCategory = await db.category.findUnique({
-          where: { slug: data.slug },
-        });
-
-        if (existingCategory) {
-          throw new Error('A category with this slug already exists');
-        }
-
-        return await db.category.create({
-          data: {
-            name: data.name,
-            slug: data.slug,
-          },
-        });
+        return await debugCreateCategory(input, context);
+      },
       },
 
       updateCategory: async (
