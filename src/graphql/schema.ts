@@ -905,13 +905,11 @@ export const schema = createSchema({
     input CreateCategoryInput {
       name: String!
       slug: String!
-      description: String
     }
 
     input UpdateCategoryInput {
       name: String
       slug: String
-      description: String
     }
 
     input SearchInput {
@@ -2890,7 +2888,6 @@ export const schema = createSchema({
           .object({
             name: z.string().min(1, 'Name is required'),
             slug: z.string().min(1, 'Slug is required'),
-            description: z.string().optional().nullable(),
           })
           .parse(input);
 
@@ -2907,7 +2904,6 @@ export const schema = createSchema({
           data: {
             name: data.name,
             slug: data.slug,
-            description: data.description,
           },
         });
       },
@@ -2924,7 +2920,6 @@ export const schema = createSchema({
           .object({
             name: z.string().min(1).optional(),
             slug: z.string().min(1).optional(),
-            description: z.string().optional().nullable(),
           })
           .parse(input);
 
@@ -2953,7 +2948,6 @@ export const schema = createSchema({
           data: {
             ...(data.name && { name: data.name }),
             ...(data.slug && { slug: data.slug }),
-            ...(data.description !== undefined && { description: data.description }),
           },
         });
       },
