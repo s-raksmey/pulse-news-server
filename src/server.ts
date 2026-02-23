@@ -14,6 +14,14 @@ const yoga = createYoga({
     origin: ['http://localhost:3000', 'http://localhost:3001'], // Allow admin and web apps
     credentials: true,
   },
+  // Add better error handling and logging
+  maskedErrors: false, // Show detailed errors in development
+  logging: {
+    debug: (...args) => console.log('🔍 GraphQL Debug:', ...args),
+    info: (...args) => console.log('ℹ️ GraphQL Info:', ...args),
+    warn: (...args) => console.warn('⚠️ GraphQL Warning:', ...args),
+    error: (...args) => console.error('❌ GraphQL Error:', ...args),
+  },
 });
 
 createServer(yoga).listen(4000, () => {
