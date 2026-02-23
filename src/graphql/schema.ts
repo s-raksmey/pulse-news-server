@@ -752,6 +752,7 @@ export const schema = createSchema({
 
       # Content queries
       categories: [Category!]!
+      topics: [Topic!]!
 
       articles(
         status: ArticleStatus
@@ -1486,6 +1487,7 @@ export const schema = createSchema({
       debugArticles,
 
       categories: async () => db.category.findMany({ orderBy: { name: 'asc' } }),
+      topics: async () => db.topic.findMany({ include: { category: true }, orderBy: { title: 'asc' } }),
 
       articles: async (_: unknown, args: any, context: GraphQLContext) => {
         // Require authentication for articles management
@@ -2824,8 +2826,11 @@ export const schema = createSchema({
         return true;
       },
 
-      upsertTopic: async (_: unknown, { id, input }: any) => {
+      upsertTopic: async (_: unknown, { id, input }: any, context: GraphQLContext) => {
         const data = TopicInput.parse(input);
+        requireAuth(context);
+        requireAdmin(context);
+
 
         const category = await db.category.findUnique({
           where: { slug: data.categorySlug },
@@ -2862,8 +2867,11 @@ export const schema = createSchema({
         });
       },
 
-      deleteTopic: async (_: unknown, { id }: { id: string }) => {
+      deleteTopic: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
         const topic = await db.topic.findUnique({ where: { id } });
+        requireAuth(context);
+        requireAdmin(context);
+
         if (!topic) return false;
 
         await db.topic.delete({ where: { id } });
@@ -2876,7 +2884,7 @@ export const schema = createSchema({
 
       createCategory: async (_: unknown, { input }: { input: any }, context: GraphQLContext) => {
         requireAuth(context);
-        requireEditor(context);
+        requireAdmin(context);
 
         const data = z
           .object({
@@ -2910,7 +2918,7 @@ export const schema = createSchema({
         context: GraphQLContext
       ) => {
         requireAuth(context);
-        requireEditor(context);
+        requireAdmin(context);
 
         const data = z
           .object({
@@ -2952,7 +2960,7 @@ export const schema = createSchema({
 
       deleteCategory: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
         requireAuth(context);
-        requireEditor(context);
+        requireAdmin(context);
 
         // Check if category exists
         const existingCategory = await db.category.findUnique({
@@ -3369,7 +3377,7 @@ export const schema = createSchema({
         context: GraphQLContext
       ) => {
         requireAuth(context);
-        requireEditor(context);
+        requireAdmin(context);
 
         const { AuditService, AuditEventType } = await import('../services/auditService');
 
@@ -3536,7 +3544,7 @@ export const schema = createSchema({
         context: GraphQLContext
       ) => {
         requireAuth(context);
-        requireEditor(context);
+        requireAdmin(context);
 
         const { AuditService, AuditEventType } = await import('../services/auditService');
 
@@ -3780,7 +3788,7 @@ export const schema = createSchema({
         context: GraphQLContext
       ) => {
         requireAuth(context);
-        requireEditor(context);
+        requireAdmin(context);
 
         const { AuditService, AuditEventType } = await import('../services/auditService');
 
@@ -3849,7 +3857,7 @@ export const schema = createSchema({
         context: GraphQLContext
       ) => {
         requireAuth(context);
-        requireEditor(context);
+        requireAdmin(context);
 
         const { AuditService, AuditEventType } = await import('../services/auditService');
 
