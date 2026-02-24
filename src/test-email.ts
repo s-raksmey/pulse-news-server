@@ -81,7 +81,7 @@ async function testEmailConfiguration() {
     console.log('✅ Registration approved email sent');
 
     // Email verification
-    await EmailService.sendEmailVerification({
+    await EmailService.sendEmailVerification(testEmail, {
       name: 'Test User',
       verificationUrl: `${baseUrl}/verify-email?code=TEST123&email=${encodeURIComponent(testEmail)}`,
       expiryHours: 24,
