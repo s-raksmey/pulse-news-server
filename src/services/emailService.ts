@@ -107,7 +107,7 @@ export class EmailService {
         return cachedTransporter;
       }
 
-      const transporter = nodemailer.createTransporter({
+      const transporter = nodemailer.createTransport({
         host: config.host,
         port: config.port,
         secure: config.port === 465,
