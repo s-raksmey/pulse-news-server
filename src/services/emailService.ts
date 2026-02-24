@@ -148,23 +148,29 @@ export class EmailService {
 
   static async sendNotificationEmail(input: NotificationEmailInput): Promise<void> {
     try {
+      console.log(`🔄 Attempting to send email to ${input.to}: ${input.subject}`);
+      
       const transporter = await this.getTransporter();
       const config = await this.getEmailConfig();
 
       if (!transporter || !config) {
-        console.log('Email notifications disabled: No valid email configuration found');
+        console.log('❌ Email notifications disabled: No valid email configuration found');
         return;
       }
 
-      await transporter.sendMail({
+      console.log(`📧 Sending email via ${config.host}:${config.port} from ${config.fromAddress}`);
+
+      const mailOptions = {
         from: `${config.fromName} <${config.fromAddress}>`,
         to: input.to,
         subject: input.subject,
         text: input.text,
         html: input.html,
-      });
+      };
 
-      console.log(`Email notification sent successfully to ${input.to}: ${input.subject}`);
+      const result = await transporter.sendMail(mailOptions);
+      console.log(`✅ Email sent successfully to ${input.to}: ${input.subject}`);
+      console.log(`📬 Message ID: ${result.messageId}`);
     } catch (error) {
       // Log the error but don't throw it - this prevents email failures from breaking workflows
       console.error('Failed to send email notification:', {

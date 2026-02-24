@@ -2283,19 +2283,6 @@ export const schema = createSchema({
               const request = await db.accountRequest.create({
                 data: { ...parsed, status: 'pending' },
               });
-
-              // Send registration received email to user
-              try {
-                const { EmailService } = await import('../services/emailService');
-                await EmailService.sendRegistrationReceived(request.email, {
-                  name: request.requesterName,
-                  email: request.email,
-                });
-                console.log(`✅ Registration received email sent to ${request.email}`);
-              } catch (error) {
-                console.error('❌ Failed to send registration received email:', error);
-                // Don't fail the registration if email fails
-              }
               // Send notification to admins
               const admins = await db.user.findMany({ where: { role: 'ADMIN', isActive: true } });
               const { NotificationService } = await import('../services/notificationService');
@@ -2318,32 +2305,6 @@ export const schema = createSchema({
                 where: { id },
                 data: { status: 'awaiting_verification', customMessage, verificationCode },
               });
-
-              // Send registration approved and verification emails
-              try {
-                const { EmailService } = await import('../services/emailService');
-                const baseUrl = await EmailService.getBaseUrl();
-                
-                // Send approval notification
-                await EmailService.sendRegistrationApproved(request.email, {
-                  name: request.requesterName,
-                  email: request.email,
-                  loginUrl: `${baseUrl}/login`,
-                  role: request.requestedRole,
-                });
-                
-                // Send verification email with code
-                await EmailService.sendEmailVerification({
-                  name: request.requesterName,
-                  verificationUrl: `${baseUrl}/verify-email?code=${verificationCode}&email=${encodeURIComponent(request.email)}`,
-                  expiryHours: 24,
-                });
-                
-                console.log(`✅ Approval and verification emails sent to ${request.email}`);
-              } catch (error) {
-                console.error('❌ Failed to send approval/verification emails:', error);
-                // Don't fail the approval if email fails
-              }
               
 
               try {
