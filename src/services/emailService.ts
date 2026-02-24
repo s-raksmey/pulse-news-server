@@ -273,8 +273,8 @@ export class EmailService {
     
     if (!baseUrl) {
       console.warn('No base URL configured. Please set SITE_BASE_URL environment variable or configure site.base_url in admin settings.');
-      // For development, default to server port (4000) for verification links
-      return process.env.NODE_ENV === 'production' ? 'https://pulsenews.com' : 'http://localhost:4000';
+      // For development, default to admin app (3001) which has the verify-email page
+      return process.env.NODE_ENV === 'production' ? 'https://pulsenews.com' : 'http://localhost:3001';
     }
     
     return baseUrl;
