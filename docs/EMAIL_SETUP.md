@@ -122,6 +122,22 @@ SITE_BASE_URL=https://your-domain.com
 
 ### Testing Email Configuration
 
+#### Option 1: Manual Test Script (Recommended)
+
+Run the built-in email test script:
+
+```bash
+npx ts-node src/test-email.ts
+```
+
+This script will:
+- ✅ Verify email configuration
+- ✅ Test SMTP connection
+- ✅ Send test emails for all registration workflow steps
+- ✅ Provide detailed error diagnostics
+
+#### Option 2: Server Integration Test
+
 1. **Start the server**:
    ```bash
    npm run dev
@@ -133,7 +149,8 @@ SITE_BASE_URL=https://your-domain.com
    ```
 
 3. **Test registration workflow**:
-   - Submit a registration request
+   - Submit a registration request via admin panel
+   - Admin approves the request
    - Check server logs for email sending status
    - Check your email inbox for notifications
 
