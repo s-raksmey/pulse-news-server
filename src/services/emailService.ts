@@ -264,9 +264,19 @@ export class EmailService {
 
   // Utility method to get base URL for links
   static async getBaseUrl(): Promise<string> {
-    const baseUrl = 
-      (await SettingsService.getSettingValue<string>('site.base_url')) || 
-      process.env.SITE_BASE_URL;
-    return baseUrl || 'https://pulsenews.com';
+    // Prioritize environment variable for development, then database setting
+    const envBaseUrl = process.env.SITE_BASE_URL;
+    const dbBaseUrl = await SettingsService.getSettingValue<string>('site.base_url');
+    
+    // Use environment variable first (for development), then database setting
+    const baseUrl = envBaseUrl || dbBaseUrl;
+    
+    if (!baseUrl) {
+      console.warn('No base URL configured. Please set SITE_BASE_URL environment variable or configure site.base_url in admin settings.');
+      // For development, default to server port (4000) for verification links
+      return process.env.NODE_ENV === 'production' ? 'https://pulsenews.com' : 'http://localhost:4000';
+    }
+    
+    return baseUrl;
   }
 }
