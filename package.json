@@ -18,6 +18,7 @@
     "fix-categories-dry-run": "tsx src/scripts/fix-article-categories.ts",
     "cleanup-topics": "tsx src/scripts/cleanup-unauthorized-topics.ts --apply",
     "cleanup-topics-dry-run": "tsx src/scripts/cleanup-unauthorized-topics.ts --dry-run",
+    "disable-email-notifications": "tsx src/scripts/disable-email-notifications.ts",
     "lint": "eslint src prisma --ext .ts",
     "lint:fix": "eslint src prisma --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.ts\"",
