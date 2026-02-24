@@ -321,7 +321,7 @@ export class RegistrationWorkflowService {
       const baseUrl = await EmailService.getBaseUrl();
       const verificationUrl = `${baseUrl}/verify-email?token=${registrationRequest.verificationToken}&email=${encodeURIComponent(registrationRequest.email)}`;
 
-      await EmailService.sendEmailVerification({
+      await EmailService.sendEmailVerification(registrationRequest.email, {
         name: registrationRequest.name,
         verificationUrl,
         expiryHours: this.VERIFICATION_TOKEN_EXPIRY_HOURS,

@@ -199,13 +199,11 @@ export class EmailService {
   }
 
   // Registration workflow email methods
-  static async sendEmailVerification(data: EmailVerificationData): Promise<void> {
+  static async sendEmailVerification(email: string, data: EmailVerificationData): Promise<void> {
     const { html, text } = EmailTemplates.generateEmailVerification(data);
     
     await this.sendNotificationEmail({
-      to: data.verificationUrl.includes('email=') ? 
-        decodeURIComponent(data.verificationUrl.split('email=')[1].split('&')[0]) : 
-        '', // Extract email from verification URL or pass separately
+      to: email,
       subject: 'Verify Your Email Address - Pulse News',
       text,
       html,
