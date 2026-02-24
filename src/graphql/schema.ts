@@ -1405,7 +1405,7 @@ export const schema = createSchema({
                 throw new AuthorizationError('Admin access required');
               }
               
-              return db.accountRequest.findMany({
+              return db.registrationRequest.findMany({
                 where: status ? { status } : {},
                 orderBy: { createdAt: 'desc' },
               });
@@ -2276,19 +2276,19 @@ export const schema = createSchema({
             submitAccountRequest: async (_: unknown, { input }: any) => {
               const { AccountRequestInput } = await import('../services/userManagementService');
               const parsed = AccountRequestInput.parse(input);
-              const existing = await db.accountRequest.findFirst({ where: { email: parsed.email, status: { in: ['pending', 'awaiting_verification'] } } });
+              const existing = await db.registrationRequest.findFirst({ where: { email: parsed.email, status: { in: ['PENDING_APPROVAL', 'PENDING_VERIFICATION'] } } });
               if (existing) {
                 return { success: false, message: 'Request already exists or pending', request: existing };
               }
-              const request = await db.accountRequest.create({
-                data: { ...parsed, status: 'pending' },
+              const request = await db.registrationRequest.create({
+                data: { ...parsed, status: 'PENDING_APPROVAL' },
               });
 
               // Send registration received email to user
               try {
                 const { EmailService } = await import('../services/emailService');
                 await EmailService.sendRegistrationReceived(request.email, {
-                  name: request.requesterName,
+                  name: request.name,
                   email: request.email,
                 });
                 console.log(`✅ Registration received email sent to ${request.email}`);
@@ -2313,10 +2313,10 @@ export const schema = createSchema({
               requireAuth(context);
               requireAdmin(context);
               // Generate verification code for user verification
-              const verificationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-              const request = await db.accountRequest.update({
+              const verificationToken = Math.random().toString(36).substring(2, 8).toUpperCase();
+              const request = await db.registrationRequest.update({
                 where: { id },
-                data: { status: 'awaiting_verification', customMessage, verificationCode },
+                data: { status: 'PENDING_VERIFICATION', customMessage, verificationToken },
               });
 
               // Send registration approved and verification emails
@@ -2326,16 +2326,15 @@ export const schema = createSchema({
                 
                 // Send approval notification
                 await EmailService.sendRegistrationApproved(request.email, {
-                  name: request.requesterName,
-                  email: request.email,
+                  name: request.name,
                   loginUrl: `${baseUrl}/login`,
                   role: request.requestedRole,
                 });
                 
                 // Send verification email with code
-                await EmailService.sendEmailVerification({
-                  name: request.requesterName,
-                  verificationUrl: `${baseUrl}/verify-email?code=${verificationCode}&email=${encodeURIComponent(request.email)}`,
+                await EmailService.sendEmailVerification(request.email, {
+                  name: request.name,
+                  verificationUrl: `${baseUrl}/verify-email?code=${verificationToken}&email=${encodeURIComponent(request.email)}`,
                   expiryHours: 24,
                 });
                 
@@ -2365,9 +2364,9 @@ export const schema = createSchema({
             rejectAccountRequest: async (_: unknown, { id, customMessage }: any, context: GraphQLContext) => {
               requireAuth(context);
               requireAdmin(context);
-              const request = await db.accountRequest.update({
+              const request = await db.registrationRequest.update({
                 where: { id },
-                data: { status: 'rejected', customMessage },
+                data: { status: 'REJECTED', customMessage },
               });
               
               try {
@@ -2376,7 +2375,7 @@ export const schema = createSchema({
                 const supportEmail = await EmailService.getSupportEmail();
                 
                 await EmailService.sendRegistrationRejected(request.email, {
-                  name: request.requesterName,
+                  name: request.name,
                   reason: customMessage,
                   supportEmail: supportEmail,
                 });
@@ -2404,26 +2403,26 @@ export const schema = createSchema({
 
             verifyAccountRequest: async (_: unknown, { id, code }: any) => {
               // TODO: Securely verify code, activate user, send congratulations notification
-              const request = await db.accountRequest.findUnique({ where: { id } });
-              if (!request || request.status !== 'awaiting_verification') {
+              const request = await db.registrationRequest.findUnique({ where: { id } });
+              if (!request || request.status !== 'PENDING_VERIFICATION') {
                 return { success: false, message: 'Invalid or expired verification', request };
               }
               // Validate code
-              if (request.verificationCode !== code) {
+              if (request.verificationToken !== code) {
                 return { success: false, message: 'Invalid verification code', request };
               }
               // Activate user account
               const user = await db.user.create({
                 data: {
                   email: request.email,
-                  name: request.requesterName,
+                  name: request.name,
                   role: request.requestedRole,
                   isActive: true,
                 },
               });
-              await db.accountRequest.update({
+              await db.registrationRequest.update({
                 where: { id },
-                data: { status: 'active', userId: user.id },
+                data: { status: 'APPROVED', userId: user.id },
               });
               // Send congratulations notification
               // Send account activation email
@@ -2432,8 +2431,7 @@ export const schema = createSchema({
                 const baseUrl = await EmailService.getBaseUrl();
                 
                 await EmailService.sendAccountActivation(request.email, {
-                  name: request.requesterName,
-                  email: request.email,
+                  name: request.name,
                   loginUrl: `${baseUrl}/login`,
                   role: request.requestedRole,
                 });
