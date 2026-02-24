@@ -84,45 +84,112 @@ export class EmailService {
   }
 
   static async getTransporter(): Promise<nodemailer.Transporter | null> {
-    const config = await this.getEmailConfig();
-    if (!config) return null;
+    try {
+      const config = await this.getEmailConfig();
+      if (!config) return null;
 
-    const configKey = buildConfigKey(config);
-    if (cachedTransporter && cachedConfigKey === configKey) {
-      return cachedTransporter;
+      // Validate SMTP host before creating transporter
+      if (!config.host || config.host.trim() === '') {
+        console.warn('Email configuration incomplete: SMTP host is empty');
+        return null;
+      }
+
+      // Check for known invalid hostnames that cause DNS errors
+      if (config.host === 'cms-news.gmail.com') {
+        console.error('Invalid SMTP host detected: cms-news.gmail.com');
+        console.error('This hostname does not exist and will cause DNS resolution errors.');
+        console.error('Please update your email settings to use a valid SMTP server.');
+        return null;
+      }
+
+      const configKey = buildConfigKey(config);
+      if (cachedTransporter && cachedConfigKey === configKey) {
+        return cachedTransporter;
+      }
+
+      const transporter = nodemailer.createTransporter({
+        host: config.host,
+        port: config.port,
+        secure: config.port === 465,
+        auth: config.username
+          ? {
+              user: config.username,
+              pass: config.password,
+            }
+          : undefined,
+      });
+
+      // Test the connection to catch configuration errors early
+      try {
+        await transporter.verify();
+        console.log(`SMTP connection verified successfully for ${config.host}:${config.port}`);
+      } catch (verifyError) {
+        console.warn('SMTP connection verification failed:', {
+          host: config.host,
+          port: config.port,
+          error: verifyError instanceof Error ? verifyError.message : 'Unknown error'
+        });
+        // Don't return null here - let the actual send attempt handle the error
+        // This allows for cases where verify() fails but sendMail() might still work
+      }
+
+      cachedTransporter = transporter;
+      cachedConfigKey = configKey;
+
+      return transporter;
+    } catch (error) {
+      console.error('Failed to create email transporter:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      return null;
     }
-
-    const transporter = nodemailer.createTransport({
-      host: config.host,
-      port: config.port,
-      secure: config.port === 465,
-      auth: config.username
-        ? {
-            user: config.username,
-            pass: config.password,
-          }
-        : undefined,
-    });
-
-    cachedTransporter = transporter;
-    cachedConfigKey = configKey;
-
-    return transporter;
   }
 
   static async sendNotificationEmail(input: NotificationEmailInput): Promise<void> {
-    const transporter = await this.getTransporter();
-    const config = await this.getEmailConfig();
+    try {
+      const transporter = await this.getTransporter();
+      const config = await this.getEmailConfig();
 
-    if (!transporter || !config) return;
+      if (!transporter || !config) {
+        console.log('Email notifications disabled: No valid email configuration found');
+        return;
+      }
 
-    await transporter.sendMail({
-      from: `${config.fromName} <${config.fromAddress}>`,
-      to: input.to,
-      subject: input.subject,
-      text: input.text,
-      html: input.html,
-    });
+      await transporter.sendMail({
+        from: `${config.fromName} <${config.fromAddress}>`,
+        to: input.to,
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+      });
+
+      console.log(`Email notification sent successfully to ${input.to}: ${input.subject}`);
+    } catch (error) {
+      // Log the error but don't throw it - this prevents email failures from breaking workflows
+      console.error('Failed to send email notification:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        to: input.to,
+        subject: input.subject,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      // Provide specific guidance for the cms-news.gmail.com DNS error
+      if (error instanceof Error && error.message.includes('cms-news.gmail.com')) {
+        console.error('🚨 SMTP Configuration Error: Invalid hostname "cms-news.gmail.com" detected.');
+        console.error('💡 Solution: Update your email settings in the admin panel:');
+        console.error('   1. Go to Settings > Email');
+        console.error('   2. Change SMTP Host to a valid server (e.g., smtp.gmail.com)');
+        console.error('   3. Or disable email notifications temporarily');
+      }
+      
+      // Provide guidance for general DNS resolution errors
+      if (error instanceof Error && error.message.includes('getaddrinfo ENOTFOUND')) {
+        console.error('🚨 DNS Resolution Error: Cannot resolve SMTP hostname.');
+        console.error('💡 This error prevents article workflow from completing.');
+        console.error('💡 Email notifications will be skipped to allow workflows to continue.');
+      }
+    }
   }
 
   // Registration workflow email methods
