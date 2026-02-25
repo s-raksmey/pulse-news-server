@@ -157,12 +157,25 @@ model Category {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
+  
+  // Theme configuration for public website
+  theme     CategoryTheme @default(DEFAULT)
+  themeConfig Json?    // Additional theme configuration (colors, layout options, etc.)
 
   articles  Article[]
   topics    Topic[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum CategoryTheme {
+  DEFAULT     // Standard layout with sidebar
+  MINIMAL     // Clean, minimal layout
+  MAGAZINE    // Magazine-style layout with featured articles
+  GRID        // Grid-based layout
+  TIMELINE    // Timeline/chronological layout
+  CARDS       // Card-based layout
 }
 
 
