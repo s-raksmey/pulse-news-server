@@ -359,55 +359,10 @@ export const schema = createSchema({
     }
 
     enum BreakingNewsRequestStatus {
-
-    enum CategoryTheme {
-      DEFAULT
-      MINIMAL
-      MAGAZINE
-      GRID
-      TIMELINE
-      CARDS
-    }
       NONE
-
-    enum CategoryTheme {
-      DEFAULT
-      MINIMAL
-      MAGAZINE
-      GRID
-      TIMELINE
-      CARDS
-    }
       PENDING
-
-    enum CategoryTheme {
-      DEFAULT
-      MINIMAL
-      MAGAZINE
-      GRID
-      TIMELINE
-      CARDS
-    }
       APPROVED
-
-    enum CategoryTheme {
-      DEFAULT
-      MINIMAL
-      MAGAZINE
-      GRID
-      TIMELINE
-      CARDS
-    }
       REJECTED
-
-    enum CategoryTheme {
-      DEFAULT
-      MINIMAL
-      MAGAZINE
-      GRID
-      TIMELINE
-      CARDS
-    }
     }
 
     enum CategoryTheme {
