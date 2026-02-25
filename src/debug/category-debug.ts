@@ -30,6 +30,8 @@ export async function debugCreateCategory(input: any, context: GraphQLContext) {
       .object({
         name: z.string().min(1, 'Name is required'),
         slug: z.string().min(1, 'Slug is required'),
+        theme: z.enum(['DEFAULT', 'MINIMAL', 'MAGAZINE', 'GRID', 'TIMELINE', 'CARDS']).optional(),
+        themeConfig: z.any().optional(), // JSON field
       })
       .parse(input);
 
@@ -61,6 +63,8 @@ export async function debugCreateCategory(input: any, context: GraphQLContext) {
       data: {
         name: data.name,
         slug: data.slug,
+        theme: data.theme || 'DEFAULT',
+        themeConfig: data.themeConfig || null,
       },
     });
 
@@ -76,4 +80,3 @@ export async function debugCreateCategory(input: any, context: GraphQLContext) {
     throw error;
   }
 }
-

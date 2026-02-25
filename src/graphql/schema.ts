@@ -359,10 +359,64 @@ export const schema = createSchema({
     }
 
     enum BreakingNewsRequestStatus {
+
+    enum CategoryTheme {
+      DEFAULT
+      MINIMAL
+      MAGAZINE
+      GRID
+      TIMELINE
+      CARDS
+    }
       NONE
+
+    enum CategoryTheme {
+      DEFAULT
+      MINIMAL
+      MAGAZINE
+      GRID
+      TIMELINE
+      CARDS
+    }
       PENDING
+
+    enum CategoryTheme {
+      DEFAULT
+      MINIMAL
+      MAGAZINE
+      GRID
+      TIMELINE
+      CARDS
+    }
       APPROVED
+
+    enum CategoryTheme {
+      DEFAULT
+      MINIMAL
+      MAGAZINE
+      GRID
+      TIMELINE
+      CARDS
+    }
       REJECTED
+
+    enum CategoryTheme {
+      DEFAULT
+      MINIMAL
+      MAGAZINE
+      GRID
+      TIMELINE
+      CARDS
+    }
+    }
+
+    enum CategoryTheme {
+      DEFAULT
+      MINIMAL
+      MAGAZINE
+      GRID
+      TIMELINE
+      CARDS
     }
 
     enum SettingType {
@@ -380,6 +434,8 @@ export const schema = createSchema({
       id: ID!
       name: String!
       slug: String!
+      theme: CategoryTheme!
+      themeConfig: JSON
       createdAt: String!
       updatedAt: String!
     }
@@ -907,11 +963,15 @@ export const schema = createSchema({
     input CreateCategoryInput {
       name: String!
       slug: String!
+      theme: CategoryTheme
+      themeConfig: JSON
     }
 
     input UpdateCategoryInput {
       name: String
       slug: String
+      theme: CategoryTheme
+      themeConfig: JSON
     }
 
     input SearchInput {
@@ -2939,6 +2999,8 @@ export const schema = createSchema({
           .object({
             name: z.string().min(1).optional(),
             slug: z.string().min(1).optional(),
+            theme: z.enum(['DEFAULT', 'MINIMAL', 'MAGAZINE', 'GRID', 'TIMELINE', 'CARDS']).optional(),
+            themeConfig: z.any().optional(),
           })
           .parse(input);
 
@@ -2967,6 +3029,8 @@ export const schema = createSchema({
           data: {
             ...(data.name && { name: data.name }),
             ...(data.slug && { slug: data.slug }),
+            ...(data.theme && { theme: data.theme }),
+            ...(data.themeConfig !== undefined && { themeConfig: data.themeConfig }),
           },
         });
       },
